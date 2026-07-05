@@ -24,6 +24,9 @@ private struct SignedOutView: View {
                 .font(.system(size: 28, weight: .semibold))
             Text("Private team push-to-talk, scoped to one active room.")
                 .foregroundStyle(.secondary)
+            TextField("Invited email", text: $model.signInEmail)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 420)
             Picker("Permission preset", selection: $model.permissionPreset) {
                 ForEach(AppShellModel.PermissionPreset.allCases) { preset in
                     Text(preset.title).tag(preset)
@@ -32,10 +35,17 @@ private struct SignedOutView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 420)
 
-            Button("Sign In Mock User") {
-                model.signInMockUser()
+            Button("Sign In") {
+                Task { await model.signIn() }
             }
             .buttonStyle(.borderedProminent)
+            .disabled(model.signInEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            if let signInError = model.signInError {
+                Text(signInError)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(40)

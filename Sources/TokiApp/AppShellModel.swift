@@ -3,6 +3,32 @@ import Combine
 import Foundation
 import TokiCore
 
+protocol AppShellAPIService: Sendable {
+    func requestMagicLink(email: String) async throws -> MagicLinkResponse
+    func createSession(token: String, deviceName: String) async throws -> SessionResponse
+    func conversations(sessionToken: String) async throws -> ConversationsResponse
+}
+
+struct TokiBackendAppShellAPIService: AppShellAPIService {
+    private let client: TokiAPIClient
+
+    init(baseURL: URL = URL(string: "http://127.0.0.1:8080")!) {
+        self.client = TokiAPIClient(baseURL: baseURL)
+    }
+
+    func requestMagicLink(email: String) async throws -> MagicLinkResponse {
+        try await client.requestMagicLink(email: email)
+    }
+
+    func createSession(token: String, deviceName: String) async throws -> SessionResponse {
+        try await client.createSession(token: token, deviceName: deviceName)
+    }
+
+    func conversations(sessionToken: String) async throws -> ConversationsResponse {
+        try await client.conversations(sessionToken: sessionToken)
+    }
+}
+
 @MainActor
 final class AppShellModel: ObservableObject {
     enum AuthenticationState: Equatable {
@@ -107,6 +133,9 @@ final class AppShellModel: ObservableObject {
     @Published private(set) var detailStatus = "Select a room to listen."
     @Published private(set) var canUseManualPTT = false
     @Published private(set) var canUseKeyboardPTT = false
+    @Published private(set) var rooms: [RoomSummary] = []
+    @Published var signInEmail = ""
+    @Published private(set) var signInError: String?
     @Published var isOutputMuted = false
     @Published var permissionPreset: PermissionPreset = .ready {
         didSet { rebuildSessionForPermissions() }
@@ -117,19 +146,22 @@ final class AppShellModel: ObservableObject {
     @Published var selectedOutputDeviceID = "output-system"
     @Published var pushToTalkShortcutLabel = "Shift + Command + Space"
 
-    let rooms: [RoomSummary] = [
-        RoomSummary(id: ConversationID("design"), title: "Design", subtitle: "3 listening", participants: 4),
-        RoomSummary(id: ConversationID("ops"), title: "Ops", subtitle: "Floor controlled", participants: 6),
-        RoomSummary(id: ConversationID("founders"), title: "Founders", subtitle: "Private room", participants: 3)
-    ]
-
+    private let apiService: AppShellAPIService
+    private let sessionTokenStore: SessionTokenStoring
     private let settingsStore = LocalSettingsStore(defaults: .standard)
     private let permissionCoordinator: PermissionCoordinating
+    private var currentUserID = UserID("local-user")
     private var session: AppSessionState?
     private var delayedGrantTask: Task<Void, Never>?
     private var isShortcutHeld = false
 
-    init(permissionCoordinator: PermissionCoordinating = PermissionCoordinator.live()) {
+    init(
+        apiService: AppShellAPIService = TokiBackendAppShellAPIService(),
+        sessionTokenStore: SessionTokenStoring = KeychainSessionTokenStore(),
+        permissionCoordinator: PermissionCoordinating = PermissionCoordinator.live()
+    ) {
+        self.apiService = apiService
+        self.sessionTokenStore = sessionTokenStore
         self.permissionCoordinator = permissionCoordinator
         loadSettings()
     }
@@ -139,19 +171,45 @@ final class AppShellModel: ObservableObject {
         return rooms.first { $0.id == activeConversationID }
     }
 
-    func signInMockUser() {
-        authenticationState = .signedIn
-        rebuildSessionForPermissions()
-        if let firstRoom = rooms.first {
-            selectRoom(firstRoom.id)
+    func signIn() async {
+        let email = signInEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else {
+            signInError = "Enter an invited email."
+            return
+        }
+
+        do {
+            signInError = nil
+            let magicLink = try await apiService.requestMagicLink(email: email)
+            let sessionResponse = try await apiService.createSession(
+                token: magicLink.token,
+                deviceName: Host.current().localizedName ?? "Mac"
+            )
+            try sessionTokenStore.saveToken(sessionResponse.sessionToken)
+            let conversationsResponse = try await apiService.conversations(sessionToken: sessionResponse.sessionToken)
+
+            currentUserID = sessionResponse.user.id
+            rooms = conversationsResponse.conversations.map { RoomSummary(conversation: $0, currentUserID: currentUserID) }
+            authenticationState = .signedIn
+            rebuildSessionForPermissions()
+            if let firstRoom = rooms.first {
+                selectRoom(firstRoom.id)
+            }
+        } catch {
+            try? sessionTokenStore.clearToken()
+            authenticationState = .signedOut
+            rooms = []
+            signInError = "Sign in failed. Confirm the invite and backend connection."
         }
     }
 
     func signOut() {
         delayedGrantTask?.cancel()
+        try? sessionTokenStore.clearToken()
         session = nil
         authenticationState = .signedOut
         activeConversationID = nil
+        rooms = []
         menuBarStatus = .signedOut
         activityLabel = "Signed out"
         detailStatus = "Open Toki to join a room."
@@ -265,16 +323,19 @@ final class AppShellModel: ObservableObject {
         switch permissionPreset {
         case .ready:
             session = AppSessionState.mockSignedIn(
+                localUserID: currentUserID,
                 microphone: .granted,
                 inputMonitoring: .granted
             )
         case .microphoneDenied:
             session = AppSessionState.mockSignedIn(
+                localUserID: currentUserID,
                 microphone: .denied,
                 inputMonitoring: .granted
             )
         case .inputMonitoringDenied:
             session = AppSessionState.mockSignedIn(
+                localUserID: currentUserID,
                 microphone: .granted,
                 inputMonitoring: .denied
             )
@@ -413,5 +474,23 @@ final class AppShellModel: ObservableObject {
         if let shortcut = preferences.pushToTalkShortcut, shortcut.keyCode == 49, shortcut.modifiers == [.command, .shift] {
             pushToTalkShortcutLabel = "Shift + Command + Space"
         }
+    }
+}
+
+private extension AppShellModel.RoomSummary {
+    init(conversation: ConversationSummary, currentUserID: UserID) {
+        let title = conversation.displayName ?? conversation.members
+            .first { $0.user.id != currentUserID }?
+            .user
+            .displayName ?? "Direct Conversation"
+        let memberCount = conversation.members.count
+        let noun = memberCount == 1 ? "member" : "members"
+
+        self.init(
+            id: conversation.id,
+            title: title,
+            subtitle: "\(memberCount) \(noun)",
+            participants: memberCount
+        )
     }
 }
