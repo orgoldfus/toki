@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"strings"
 
+	"toki/internal/realtime"
 	"toki/internal/store"
 )
 
 type Server struct {
-	store store.Store
-	mux   *http.ServeMux
+	store    store.Store
+	realtime *realtime.Hub
+	mux      *http.ServeMux
 }
 
 type userResponse struct {
@@ -55,7 +57,7 @@ type conversationResponse struct {
 }
 
 func NewServer(st store.Store) http.Handler {
-	s := &Server{store: st, mux: http.NewServeMux()}
+	s := &Server{store: st, realtime: realtime.NewHub(st, nil), mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -68,6 +70,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/auth/magic-link", s.handleMagicLink)
 	s.mux.HandleFunc("POST /v1/auth/session", s.handleSession)
 	s.mux.HandleFunc("GET /v1/me", s.handleMe)
+	s.mux.HandleFunc("GET /v1/realtime", s.realtime.ServeHTTP)
 	s.mux.HandleFunc("GET /v1/conversations", s.handleListConversations)
 	s.mux.HandleFunc("POST /v1/conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("POST /v1/conversations/", s.handleConversationMembers)
