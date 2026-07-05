@@ -11,6 +11,7 @@ The media policy is strict peer-to-peer for the MVP. The backend may coordinate 
 - Storage: PostgreSQL metadata migration in `migrations/001_metadata.sql`; current backend tests use an in-memory store.
 - Auth: invited-email development magic-link flow, bearer session token, client-side Keychain token storage.
 - Conversations: signed-in users can list conversations, create direct/group conversations, and add group members.
+- Realtime: authenticated `/v1/realtime` WebSocket for active-room presence and WebRTC signaling metadata.
 
 ## Product Constraints
 
@@ -45,6 +46,12 @@ Run the backend test suite when Go is installed:
 rtk go test ./...
 ```
 
+Run the realtime-focused Swift tests:
+
+```bash
+rtk swift test --filter RealtimeConnectionManagerTests
+```
+
 Run the development backend with in-memory storage and invited beta emails:
 
 ```bash
@@ -75,7 +82,30 @@ The Mac app expects the local backend at `http://127.0.0.1:8080` by default.
 - `GET /v1/conversations` returns conversations visible to the signed-in user.
 - `POST /v1/conversations` creates a direct or group conversation.
 - `POST /v1/conversations/{id}/members` adds invited team users to a group conversation.
+- `GET /v1/realtime` upgrades to an authenticated WebSocket when the request includes the bearer session token.
+
+## Realtime Protocol
+
+Realtime messages use a JSON envelope:
+
+```json
+{
+  "type": "room.join",
+  "id": "client-event-id",
+  "conversationId": "conversation_1",
+  "sentAt": "2026-07-05T10:00:00Z",
+  "payload": {}
+}
+```
+
+Client event types are `room.join`, `room.leave`, `presence.set`, `signal.offer`, `signal.answer`, and `signal.iceCandidate`.
+
+Server event types are `room.snapshot`, `presence.updated`, `signal.forwarded`, `error`, and `reconnect.required`.
+
+The WebSocket carries presence, room membership, and WebRTC signaling bodies only. It must not carry raw audio frames. Signaling is forwarded only between devices currently joined to the same authorized conversation.
 
 ## Verification Notes
 
-The current backend skeleton intentionally avoids audio paths. Re-check this before merging any future realtime, WebRTC, replay, diagnostics, or observability changes.
+The backend realtime channel intentionally avoids audio paths. Re-check this before merging any future WebRTC, replay, diagnostics, or observability changes.
+
+CI runs the full Swift package tests and Go backend tests on pull requests. Local Go verification requires Go 1.22 or newer to be installed.

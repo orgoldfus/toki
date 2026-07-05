@@ -28,16 +28,16 @@
 
 ## Implementation Steps
 
-- [ ] Define a versioned JSON event envelope with `type`, `id`, `conversationId`, `sentAt`, and `payload`.
-- [ ] Implement WebSocket authentication using the existing session token.
-- [ ] Add server-side room registry keyed by conversation ID and device connection ID.
-- [ ] Implement `room.join` with membership authorization.
-- [ ] Implement `room.leave` and cleanup on socket close.
-- [ ] Broadcast `room.snapshot` after join with current peers, presence, and floor state placeholder.
-- [ ] Broadcast `presence.updated` when a device joins, leaves, reconnects, or changes active status.
-- [ ] Implement `signal.offer`, `signal.answer`, and `signal.iceCandidate` forwarding only between members currently joined to the same conversation.
-- [ ] Add client realtime connection manager with exponential backoff and explicit reconnecting state.
-- [ ] On reconnect, reauthenticate, rejoin the active room, request a fresh snapshot, and trigger peer renegotiation.
+- [x] Define a versioned JSON event envelope with `type`, `id`, `conversationId`, `sentAt`, and `payload`.
+- [x] Implement WebSocket authentication using the existing session token.
+- [x] Add server-side room registry keyed by conversation ID and device connection ID.
+- [x] Implement `room.join` with membership authorization.
+- [x] Implement `room.leave` and cleanup on socket close.
+- [x] Broadcast `room.snapshot` after join with current peers, presence, and floor state placeholder.
+- [x] Broadcast `presence.updated` when a device joins, leaves, reconnects, or changes active status.
+- [x] Implement `signal.offer`, `signal.answer`, and `signal.iceCandidate` forwarding only between members currently joined to the same conversation.
+- [x] Add client realtime connection manager with exponential backoff and explicit reconnecting state.
+- [x] On reconnect, reauthenticate, rejoin the active room, request a fresh snapshot, and trigger peer renegotiation.
 
 ## Interfaces
 

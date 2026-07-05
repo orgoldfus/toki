@@ -161,8 +161,9 @@ func newTestServer(t *testing.T, invitedEmails ...string) http.Handler {
 }
 
 type signedInUser struct {
-	Token  string
-	UserID string
+	Token    string
+	UserID   string
+	DeviceID string
 }
 
 func signIn(t *testing.T, srv http.Handler, email string) signedInUser {
@@ -176,9 +177,12 @@ func signIn(t *testing.T, srv http.Handler, email string) signedInUser {
 		User  struct {
 			ID string `json:"id"`
 		} `json:"user"`
+		Device struct {
+			ID string `json:"id"`
+		} `json:"device"`
 	}](t, postJSON(t, srv, "/v1/auth/session", map[string]any{"token": magic.Token, "deviceName": email + " Mac"}, ""))
 
-	return signedInUser{Token: session.Token, UserID: session.User.ID}
+	return signedInUser{Token: session.Token, UserID: session.User.ID, DeviceID: session.Device.ID}
 }
 
 type conversationResponse struct {
