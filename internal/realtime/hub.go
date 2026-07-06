@@ -23,6 +23,7 @@ type Logger interface {
 type Hub struct {
 	store  store.Store
 	logger Logger
+	floors *floorRegistry
 
 	mu    sync.Mutex
 	rooms map[string]*room
@@ -48,6 +49,7 @@ func NewHub(st store.Store, logger Logger) *Hub {
 	return &Hub{
 		store:  st,
 		logger: logger,
+		floors: newFloorRegistry(5 * time.Minute),
 		rooms:  make(map[string]*room),
 	}
 }
@@ -108,6 +110,10 @@ func (h *Hub) handleEvent(ctx context.Context, c *client, event EventEnvelope) {
 		h.handlePresenceSet(c, event)
 	case EventSignalOffer, EventSignalAnswer, EventSignalICECandidate:
 		h.handleSignal(c, event)
+	case EventFloorRequest:
+		h.handleFloorRequest(ctx, c, event)
+	case EventFloorRelease:
+		h.handleFloorRelease(c, event)
 	default:
 		h.sendError(c, event.ID, event.ConversationID, "unknown_event", "unsupported realtime event")
 	}
@@ -152,6 +158,9 @@ func (h *Hub) handleJoin(ctx context.Context, c *client, event EventEnvelope) {
 
 	if oldUpdate != nil {
 		h.broadcast(oldRecipients, EventPresenceUpdated, "", oldUpdate.ConversationID, *oldUpdate)
+		if released := h.floors.releaseForConnection(c.connectionID, floorReleasedDisconnect); released != nil {
+			h.broadcast(oldRecipients, EventFloorReleased, "", released.ConversationID, *released)
+		}
 	}
 	h.send(c, EventRoomSnapshot, event.ID, conversation.ID, snapshot)
 	h.broadcast(recipients, EventPresenceUpdated, "", conversation.ID, update)
@@ -161,6 +170,9 @@ func (h *Hub) handleLeave(c *client, event EventEnvelope) {
 	recipients, update := h.leave(c, "left")
 	if update != nil {
 		h.broadcast(recipients, EventPresenceUpdated, event.ID, update.ConversationID, *update)
+	}
+	if released := h.floors.releaseForConnection(c.connectionID, floorReleasedReleased); released != nil {
+		h.broadcast(recipients, EventFloorReleased, event.ID, released.ConversationID, *released)
 	}
 }
 
@@ -225,10 +237,102 @@ func (h *Hub) handleSignal(c *client, event EventEnvelope) {
 	h.send(target, EventSignalForwarded, event.ID, event.ConversationID, payload)
 }
 
+func (h *Hub) handleFloorRequest(ctx context.Context, c *client, event EventEnvelope) {
+	if strings.TrimSpace(event.ConversationID) == "" {
+		h.sendError(c, event.ID, "", "missing_conversation", "conversationId is required")
+		return
+	}
+	if _, err := h.authorizedConversation(ctx, c.userID, event.ConversationID); err != nil {
+		h.sendError(c, event.ID, event.ConversationID, "forbidden", "conversation is unavailable")
+		return
+	}
+	var payload floorRequestPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		h.sendError(c, event.ID, event.ConversationID, "invalid_payload", "floor request payload is invalid")
+		return
+	}
+	if strings.TrimSpace(payload.ConversationID) == "" || payload.ConversationID != event.ConversationID {
+		h.sendError(c, event.ID, event.ConversationID, "missing_conversation", "conversationId is required")
+		return
+	}
+	if strings.TrimSpace(payload.DeviceID) == "" || payload.DeviceID != c.deviceID {
+		h.sendError(c, event.ID, event.ConversationID, "invalid_device", "floor request deviceId must match the session device")
+		return
+	}
+
+	h.mu.Lock()
+	joined := c.conversationID == event.ConversationID && c.active
+	targetRoom := h.rooms[event.ConversationID]
+	h.mu.Unlock()
+	if !joined {
+		h.sendError(c, event.ID, event.ConversationID, "not_joined", "join the active room before requesting the floor")
+		return
+	}
+
+	grant, denied := h.floors.request(event.ConversationID, floorRequester{
+		connectionID: c.connectionID,
+		userID:       c.userID,
+		deviceID:     c.deviceID,
+	}, time.Now().UTC())
+	if denied != nil {
+		h.send(c, EventFloorDenied, event.ID, event.ConversationID, *denied)
+		return
+	}
+
+	h.mu.Lock()
+	recipients := h.roomClientsLocked(targetRoom, c.connectionID)
+	h.mu.Unlock()
+
+	h.send(c, EventFloorGranted, event.ID, event.ConversationID, grant)
+	h.broadcast(recipients, EventFloorChanged, "", event.ConversationID, floorChangedPayload{
+		ConversationID:  event.ConversationID,
+		State:           "held",
+		SpeakerUserID:   grant.SpeakerUserID,
+		SpeakerDeviceID: grant.SpeakerDeviceID,
+	})
+	h.scheduleFloorTimeout()
+}
+
+func (h *Hub) handleFloorRelease(c *client, event EventEnvelope) {
+	var payload floorReleasePayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		h.sendError(c, event.ID, event.ConversationID, "invalid_payload", "floor release payload is invalid")
+		return
+	}
+	if strings.TrimSpace(event.ConversationID) == "" || payload.ConversationID != event.ConversationID {
+		h.sendError(c, event.ID, event.ConversationID, "missing_conversation", "conversationId is required")
+		return
+	}
+	if strings.TrimSpace(payload.TokenID) == "" {
+		h.sendError(c, event.ID, event.ConversationID, "missing_floor_token", "tokenId is required")
+		return
+	}
+
+	h.mu.Lock()
+	joined := c.conversationID == event.ConversationID
+	targetRoom := h.rooms[event.ConversationID]
+	recipients := h.roomClientsLocked(targetRoom, "")
+	h.mu.Unlock()
+	if !joined {
+		h.sendError(c, event.ID, event.ConversationID, "not_joined", "join the conversation before releasing the floor")
+		return
+	}
+
+	released := h.floors.release(event.ConversationID, payload.TokenID, c.connectionID, floorReleasedReleased)
+	if released == nil {
+		h.sendError(c, event.ID, event.ConversationID, "invalid_floor_token", "floor token is not active")
+		return
+	}
+	h.broadcast(recipients, EventFloorReleased, event.ID, event.ConversationID, *released)
+}
+
 func (h *Hub) disconnect(c *client) {
 	recipients, update := h.leave(c, "left")
 	if update != nil {
 		h.broadcast(recipients, EventPresenceUpdated, "", update.ConversationID, *update)
+	}
+	if released := h.floors.releaseForConnection(c.connectionID, floorReleasedDisconnect); released != nil {
+		h.broadcast(recipients, EventFloorReleased, "", released.ConversationID, *released)
 	}
 	_ = c.ws.close()
 }
@@ -295,10 +399,7 @@ func (h *Hub) snapshotLocked(conversationID string, targetRoom *room) roomSnapsh
 		ConversationID: conversationID,
 		Peers:          h.peersLocked(targetRoom),
 		Presence:       h.presenceLocked(targetRoom),
-		Floor: floorPayload{
-			State:           "idle",
-			ActiveSpeakerID: nil,
-		},
+		Floor:          h.floors.snapshot(conversationID, time.Now().UTC()),
 	}
 }
 
@@ -386,6 +487,17 @@ func (h *Hub) send(c *client, eventType string, eventID string, conversationID s
 
 func (h *Hub) sendError(c *client, eventID string, conversationID string, code string, message string) {
 	h.send(c, EventError, eventID, conversationID, errorPayload{Code: code, Message: message})
+}
+
+func (h *Hub) scheduleFloorTimeout() {
+	time.AfterFunc(h.floors.ttl, func() {
+		for _, released := range h.floors.expire(time.Now().UTC()) {
+			h.mu.Lock()
+			recipients := h.roomClientsLocked(h.rooms[released.ConversationID], "")
+			h.mu.Unlock()
+			h.broadcast(recipients, EventFloorReleased, "", released.ConversationID, released)
+		}
+	})
 }
 
 func (h *Hub) requireSession(w http.ResponseWriter, r *http.Request) (store.SessionBundle, bool) {

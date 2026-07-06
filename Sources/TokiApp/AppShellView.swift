@@ -162,6 +162,7 @@ private struct ActiveRoomPanel: View {
             HStack(spacing: 12) {
                 SummaryMetric(title: "Participants", value: "\(model.selectedRoom?.participants ?? 0)")
                 SummaryMetric(title: "Output", value: model.isOutputMuted ? "Muted" : "Live")
+                SummaryMetric(title: "Speaker", value: model.activeSpeakerLabel ?? "None")
                 SummaryMetric(title: "Shortcut", value: model.canUseKeyboardPTT ? "Ready" : "Blocked")
             }
 
@@ -196,6 +197,11 @@ private struct StatusStrip: View {
             Text(model.detailStatus)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if let activeSpeakerLabel = model.activeSpeakerLabel {
+                Text("Speaker: \(activeSpeakerLabel)")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer()
             Text(model.pushToTalkShortcutLabel)
                 .foregroundStyle(.secondary)

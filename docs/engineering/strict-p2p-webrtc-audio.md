@@ -11,6 +11,7 @@ This phase establishes the enforceable strict-P2P contracts before native media 
 - Device IDs choose the initial offerer deterministically: the lexicographically smaller device ID offers.
 - Offers, answers, and ICE candidates are sent through the existing realtime signaling envelope.
 - Leaving or switching rooms closes all tracked peer connections and disables publishing.
+- PTT floor control gates microphone publishing on a valid local floor token; see [`ptt-floor-control.md`](ptt-floor-control.md).
 
 ## Not Yet Implemented
 
@@ -29,10 +30,12 @@ Automated Swift coverage:
 - API client fetches `/v1/ice-config` with bearer auth and validates the response.
 - Room snapshots decode the backend JSON keys.
 - Peer manager creates per-peer connections, selects the deterministic offerer, sends signaling envelopes, and closes connections on room leave.
+- Floor-control state keeps publishing disabled until a local grant and clears it on release, denial, timeout, reconnect, and P2P failure.
 
 Automated Go coverage:
 
 - Backend `/v1/ice-config` requires a bearer session.
 - Backend ICE config response is STUN-only and has `relayPolicy: "disabled"`.
+- Backend realtime floor control grants one speaker, denies busy requests, releases by token, clears on disconnect, and times out held floors.
 
 CI runs both Swift and Go test suites for pull requests. Local Go verification requires Go 1.22 or newer.

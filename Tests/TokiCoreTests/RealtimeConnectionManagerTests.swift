@@ -21,6 +21,47 @@ final class RealtimeConnectionManagerTests: XCTestCase {
         XCTAssertEqual((object["payload"] as? [String: Any])?["active"] as? Bool, true)
     }
 
+    func testFloorRequestAndReleaseEventsCarryDeviceAndTokenIDs() async throws {
+        let transport = RecordingRealtimeTransport()
+        let manager = RealtimeConnectionManager(
+            sessionToken: "session-token",
+            transport: transport,
+            eventID: IncrementingRealtimeEventID(prefix: "floor"),
+            clock: FixedRealtimeClock(now: Date(timeIntervalSince1970: 1_720_000_000))
+        )
+
+        try await manager.requestFloor(conversationID: ConversationID("conversation-1"), deviceID: DeviceID("device-a"))
+        try await manager.releaseFloor(conversationID: ConversationID("conversation-1"), tokenID: FloorTokenID("token-a"))
+
+        XCTAssertEqual(transport.sent.map(\.type), [.floorRequest, .floorRelease])
+        XCTAssertEqual(transport.sent.map(\.conversationID), [ConversationID("conversation-1"), ConversationID("conversation-1")])
+        XCTAssertEqual(transport.sent[0].payload.objectValue?["conversationId"], .string("conversation-1"))
+        XCTAssertEqual(transport.sent[0].payload.objectValue?["deviceId"], .string("device-a"))
+        XCTAssertEqual(transport.sent[1].payload.objectValue?["conversationId"], .string("conversation-1"))
+        XCTAssertEqual(transport.sent[1].payload.objectValue?["tokenId"], .string("token-a"))
+    }
+
+    func testFloorGrantPayloadDecodesServerFields() throws {
+        let data = Data(
+            """
+            {
+              "conversationId": "conversation-1",
+              "tokenId": "token-a",
+              "speakerUserId": "user-a",
+              "speakerDeviceId": "device-a",
+              "grantedAt": "2026-07-06T10:00:00Z"
+            }
+            """.utf8
+        )
+
+        let payload = try JSONDecoder.tokiRealtime.decode(FloorGrantedPayload.self, from: data)
+
+        XCTAssertEqual(payload.conversationID, ConversationID("conversation-1"))
+        XCTAssertEqual(payload.tokenID, FloorTokenID("token-a"))
+        XCTAssertEqual(payload.speakerUserID, UserID("user-a"))
+        XCTAssertEqual(payload.speakerDeviceID, DeviceID("device-a"))
+    }
+
     func testReconnectReauthenticatesRejoinsActiveRoomAndRequestsPeerRenegotiation() async throws {
         let transport = RecordingRealtimeTransport()
         let manager = RealtimeConnectionManager(
@@ -63,6 +104,15 @@ final class RealtimeConnectionManagerTests: XCTestCase {
         await manager.handleConnectionDropped()
         await manager.handleConnectionDropped()
         XCTAssertEqual(manager.nextReconnectDelay(), .seconds(8))
+    }
+}
+
+private extension JSONValue {
+    var objectValue: [String: JSONValue]? {
+        guard case .object(let value) = self else {
+            return nil
+        }
+        return value
     }
 }
 

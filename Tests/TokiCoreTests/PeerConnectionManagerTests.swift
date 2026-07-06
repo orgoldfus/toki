@@ -111,6 +111,32 @@ final class PeerConnectionManagerTests: XCTestCase {
         XCTAssertTrue(manager.peerStates.isEmpty)
         XCTAssertFalse(manager.isPublishing)
     }
+
+    func testPublishingFollowsOnlyLocalGrantedFloor() async throws {
+        let factory = RecordingPeerConnectionFactory()
+        let manager = PeerConnectionManager(
+            localDeviceID: DeviceID("device-b"),
+            iceConfig: .stunOnly(urls: ["stun:stun.l.google.com:19302"]),
+            transport: PeerRecordingRealtimeTransport(),
+            peerConnectionFactory: factory,
+            eventID: IncrementingRealtimeEventID(prefix: "peer"),
+            clock: FixedRealtimeClock(now: Date(timeIntervalSince1970: 1_720_000_000))
+        )
+        try await manager.joinRoom(
+            RoomSnapshot(
+                conversationID: ConversationID("conversation-1"),
+                peers: [RoomPeer(connectionID: "connection-c", userID: UserID("user-c"), deviceID: DeviceID("device-c"), active: true)]
+            )
+        )
+
+        try await manager.applyFloor(.requesting(localUserID: UserID("user-local")), localUserID: UserID("user-local"))
+        try await manager.applyFloor(.busy(speakerID: UserID("user-c")), localUserID: UserID("user-local"))
+        try await manager.applyFloor(.granted(speakerID: UserID("user-local"), tokenID: FloorTokenID("floor-local")), localUserID: UserID("user-local"))
+        try await manager.applyFloor(.idle, localUserID: UserID("user-local"))
+
+        XCTAssertEqual(factory.connections.first?.publishingHistory, [false, false, true, false])
+        XCTAssertFalse(manager.isPublishing)
+    }
 }
 
 private final class RecordingPeerConnectionFactory: PeerConnectionCreating, @unchecked Sendable {

@@ -46,16 +46,53 @@ final class AppSessionStateTests: XCTestCase {
 
         XCTAssertEqual(session.floor, .requesting(localUserID: session.localUserID))
         XCTAssertEqual(session.activity, .requestingFloor)
+        XCTAssertFalse(session.shouldPublishMicrophone)
 
-        session.floorGrantReceived(speakerID: session.localUserID)
+        session.floorGrantReceived(tokenID: FloorTokenID("floor-1"), speakerID: session.localUserID)
 
-        XCTAssertEqual(session.floor, .granted(speakerID: session.localUserID))
+        XCTAssertEqual(session.floor, .granted(speakerID: session.localUserID, tokenID: FloorTokenID("floor-1")))
         XCTAssertEqual(session.activity, .speaking)
+        XCTAssertTrue(session.shouldPublishMicrophone)
 
         session.pushToTalkReleased()
 
         XCTAssertEqual(session.floor, .idle)
         XCTAssertEqual(session.activity, .listening)
+        XCTAssertFalse(session.shouldPublishMicrophone)
+        XCTAssertEqual(session.lastReleasedFloorTokenID, FloorTokenID("floor-1"))
+    }
+
+    func testFloorDeniedReleasedAndReconnectStopPublishingFailClosed() {
+        let session = AppSessionState.mockSignedIn()
+        session.selectConversation(id: ConversationID("ops"))
+
+        session.pushToTalkPressed(source: .mouse)
+        session.floorDeniedReceived(reason: .busy, speakerID: UserID("teammate"))
+
+        XCTAssertEqual(session.floor, .busy(speakerID: UserID("teammate")))
+        XCTAssertEqual(session.activity, .floorBusy)
+        XCTAssertFalse(session.shouldPublishMicrophone)
+
+        session.floorGrantReceived(tokenID: FloorTokenID("floor-2"), speakerID: session.localUserID)
+        XCTAssertFalse(session.shouldPublishMicrophone)
+
+        session.pushToTalkReleased()
+        session.pushToTalkPressed(source: .mouse)
+        session.floorGrantReceived(tokenID: FloorTokenID("floor-3"), speakerID: session.localUserID)
+        XCTAssertTrue(session.shouldPublishMicrophone)
+
+        session.floorReleasedReceived(tokenID: FloorTokenID("floor-3"), reason: .timeout)
+
+        XCTAssertEqual(session.floor, .idle)
+        XCTAssertEqual(session.activity, .listening)
+        XCTAssertFalse(session.shouldPublishMicrophone)
+
+        session.pushToTalkPressed(source: .mouse)
+        session.floorGrantReceived(tokenID: FloorTokenID("floor-4"), speakerID: session.localUserID)
+        session.connectionChanged(.reconnecting)
+
+        XCTAssertFalse(session.shouldPublishMicrophone)
+        XCTAssertEqual(session.activity, .reconnecting)
     }
 
     func testDeniedMicrophoneFailsClosedAndDisablesPTT() {
@@ -92,7 +129,7 @@ final class AppSessionStateTests: XCTestCase {
         let session = AppSessionState.mockSignedIn()
         session.selectConversation(id: ConversationID("design"))
 
-        session.floorGrantReceived(speakerID: UserID("teammate"))
+        session.floorGrantReceived(tokenID: FloorTokenID("floor-remote"), speakerID: UserID("teammate"))
 
         XCTAssertEqual(session.floor, .busy(speakerID: UserID("teammate")))
         XCTAssertEqual(session.activity, .floorBusy)
@@ -113,7 +150,7 @@ final class AppSessionStateTests: XCTestCase {
         XCTAssertEqual(session.activity, .p2pUnavailable)
 
         session.connectionChanged(.listening)
-        session.floorGrantReceived(speakerID: UserID("teammate"))
+        session.floorGrantReceived(tokenID: FloorTokenID("floor-remote"), speakerID: UserID("teammate"))
         XCTAssertFalse(session.canStartPushToTalk(source: .mouse))
         session.pushToTalkPressed(source: .mouse)
         XCTAssertEqual(session.activity, .floorBusy)
