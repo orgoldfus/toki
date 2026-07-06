@@ -30,6 +30,7 @@ final class AppEnvironment {
     private init() {}
 }
 
+@MainActor
 final class TokiApplicationDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
     private var globalShortcutController: GlobalShortcutController?
@@ -38,5 +39,9 @@ final class TokiApplicationDelegate: NSObject, NSApplicationDelegate {
         let model = AppEnvironment.shared.model
         menuBarController = MenuBarController(model: model)
         globalShortcutController = GlobalShortcutController(model: model)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AppEnvironment.shared.model.applicationWillTerminate()
     }
 }

@@ -6,13 +6,29 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Picker("Microphone", selection: $model.selectedInputDeviceID) {
-                Text("Built-in Microphone").tag("input-built-in")
-                Text("Studio USB").tag("input-studio")
+                ForEach(model.availableInputDevices) { device in
+                    Text(device.name).tag(device.id)
+                }
             }
 
             Picker("Output Device", selection: $model.selectedOutputDeviceID) {
-                Text("System Default").tag("output-system")
-                Text("AirPods Pro").tag("output-airpods")
+                ForEach(model.availableOutputDevices) { device in
+                    Text(device.name).tag(device.id)
+                }
+            }
+
+            if let warning = model.audioDeviceWarningLabel {
+                Text(warning)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+
+            HStack {
+                Text("Input Level")
+                ProgressView(value: model.inputLevel)
+                Button(model.isMicTesting ? "Stop Mic Test" : "Start Mic Test") {
+                    model.isMicTesting ? model.stopMicTest() : model.startMicTest()
+                }
             }
 
             HStack {
@@ -31,8 +47,8 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(20)
-        .onChange(of: model.selectedInputDeviceID) { _, _ in model.saveSettings() }
-        .onChange(of: model.selectedOutputDeviceID) { _, _ in model.saveSettings() }
+        .onChange(of: model.selectedInputDeviceID) { _, id in model.selectInputDevice(id: id) }
+        .onChange(of: model.selectedOutputDeviceID) { _, id in model.selectOutputDevice(id: id) }
         .onChange(of: model.launchAtLogin) { _, _ in model.saveSettings() }
         .onChange(of: model.diagnosticsOptIn) { _, _ in model.saveSettings() }
     }

@@ -59,8 +59,11 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
     @Published public private(set) var devicePreferences: DevicePreferences
     @Published public private(set) var shouldPublishMicrophone = false
     @Published public private(set) var lastReleasedFloorTokenID: FloorTokenID?
+    @Published public private(set) var replayAvailableDuration: TimeInterval = 0
+    @Published public private(set) var lastReplayClearReason: ReplayClearReason?
 
     private let permissions: PermissionCoordinating
+    private let replayBuffer: LocalReplayBuffer
     private var isPushToTalkActive = false
 
     public init(
@@ -69,11 +72,13 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
         realtimeConnection: RealtimeConnectionState = .disconnected,
         floor: FloorState = .idle,
         activity: SessionActivity = .idle,
-        devicePreferences: DevicePreferences = .default
+        devicePreferences: DevicePreferences = .default,
+        replayBuffer: LocalReplayBuffer = LocalReplayBuffer()
     ) {
         self.auth = .signedIn(userID: localUserID)
         self.localUserID = localUserID
         self.permissions = permissions
+        self.replayBuffer = replayBuffer
         self.realtimeConnection = realtimeConnection
         self.floor = floor
         self.activity = activity
@@ -106,10 +111,45 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
     }
 
     public func selectConversation(id: ConversationID) {
+        if activeConversationID != nil, activeConversationID != id {
+            clearReplay(reason: .roomSwitch)
+        }
         activeConversationID = id
         realtimeConnection = .listening
         floor = .idle
         activity = .listening
+    }
+
+    public func appendReceivedAudio(_ segment: LocalAudioSegment, conversationID: ConversationID) {
+        guard activeConversationID == conversationID else {
+            return
+        }
+
+        replayBuffer.append(segment: segment)
+        replayAvailableDuration = replayBuffer.availableDuration
+    }
+
+    public func appendLocalMicrophoneAudioForReplay(duration: TimeInterval) {
+        _ = duration
+    }
+
+    public func playRecentReplay(duration: TimeInterval) -> [LocalAudioSegment] {
+        ReplayPlayer(buffer: replayBuffer).playRecent(duration: duration)
+    }
+
+    public func signOut() {
+        auth = .signedOut
+        activeConversationID = nil
+        realtimeConnection = .disconnected
+        floor = .idle
+        activity = .idle
+        shouldPublishMicrophone = false
+        isPushToTalkActive = false
+        clearReplay(reason: .signOut)
+    }
+
+    public func clearReplayForAppTermination() {
+        clearReplay(reason: .appTermination)
     }
 
     public func canStartPushToTalk(source: PushToTalkSource) -> Bool {
@@ -240,5 +280,11 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
             floor = .idle
             activity = .p2pUnavailable
         }
+    }
+
+    private func clearReplay(reason: ReplayClearReason) {
+        replayBuffer.clear(reason: reason)
+        replayAvailableDuration = replayBuffer.availableDuration
+        lastReplayClearReason = replayBuffer.lastClearReason
     }
 }

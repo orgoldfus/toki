@@ -166,6 +166,21 @@ private struct ActiveRoomPanel: View {
                 SummaryMetric(title: "Shortcut", value: model.canUseKeyboardPTT ? "Ready" : "Blocked")
             }
 
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Input")
+                    ProgressView(value: model.inputLevel)
+                    Text(model.isMicTesting ? "Testing" : "Idle")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Output")
+                    ProgressView(value: model.activeOutputLevel)
+                    Text(model.activeSpeakerLabel ?? "No speaker")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Spacer(minLength: 0)
 
             HStack(spacing: 12) {
@@ -179,6 +194,11 @@ private struct ActiveRoomPanel: View {
                     model.isOutputMuted.toggle()
                 }
                 .buttonStyle(.bordered)
+                Button("Replay \(model.replayAvailableDurationLabel)") {
+                    model.playRecentReplay()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.canPlayReplay)
             }
         }
         .padding(20)
