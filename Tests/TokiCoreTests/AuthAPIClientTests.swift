@@ -183,6 +183,31 @@ final class AuthAPIClientTests: XCTestCase {
         XCTAssertEqual(response.conversation.members.first?.user.id, UserID("user-4"))
     }
 
+    func testIceConfigFetchesAuthenticatedStrictP2PConfiguration() async throws {
+        let client = makeClient { request in
+            XCTAssertEqual(request.url?.path, "/v1/ice-config")
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer session-token")
+
+            return Self.jsonResponse(
+                """
+                {
+                  "iceServers": [
+                    { "urls": ["stun:stun.l.google.com:19302"] }
+                  ],
+                  "relayPolicy": "disabled"
+                }
+                """
+            )
+        }
+
+        let response = try await client.iceConfig(sessionToken: "session-token")
+
+        XCTAssertEqual(response.relayPolicy, .disabled)
+        XCTAssertEqual(response.iceServers.flatMap(\.urls), ["stun:stun.l.google.com:19302"])
+        XCTAssertNoThrow(try StrictP2PICEPolicy.validate(response))
+    }
+
     private func makeClient(
         handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)
     ) -> TokiAPIClient {

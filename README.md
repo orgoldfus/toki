@@ -12,6 +12,7 @@ The media policy is strict peer-to-peer for the MVP. The backend may coordinate 
 - Auth: invited-email development magic-link flow, bearer session token, client-side Keychain token storage.
 - Conversations: signed-in users can list conversations, create direct/group conversations, and add group members.
 - Realtime: authenticated `/v1/realtime` WebSocket for active-room presence and WebRTC signaling metadata.
+- Strict P2P media foundation: authenticated STUN-only ICE config, client-side TURN/relay rejection, and a protocol-backed peer connection manager for active-room mesh setup.
 
 ## Product Constraints
 
@@ -79,6 +80,7 @@ The Mac app expects the local backend at `http://127.0.0.1:8080` by default.
 - `POST /v1/auth/magic-link` with `{ "email": "user@example.com" }` returns a development magic-link token for invited emails.
 - `POST /v1/auth/session` with `{ "token": "opaque-token", "deviceName": "Alice's MacBook Pro" }` returns a bearer session token, user, membership, and device.
 - `GET /v1/me` returns the current user, team memberships, and registered devices.
+- `GET /v1/ice-config` returns STUN-only ICE servers and `{ "relayPolicy": "disabled" }`.
 - `GET /v1/conversations` returns conversations visible to the signed-in user.
 - `POST /v1/conversations` creates a direct or group conversation.
 - `POST /v1/conversations/{id}/members` adds invited team users to a group conversation.
@@ -102,10 +104,26 @@ Client event types are `room.join`, `room.leave`, `presence.set`, `signal.offer`
 
 Server event types are `room.snapshot`, `presence.updated`, `signal.forwarded`, `error`, and `reconnect.required`.
 
-The WebSocket carries presence, room membership, and WebRTC signaling bodies only. It must not carry raw audio frames. Signaling is forwarded only between devices currently joined to the same authorized conversation.
+The WebSocket carries presence, room membership, and WebRTC signaling bodies only. It must not carry raw audio frames. Signaling is forwarded only between devices currently joined to the same authorized conversation. The client rejects ICE configs with TURN URLs, non-disabled relay policy, or relay ICE candidates.
+
+## Strict P2P WebRTC Status
+
+Implemented in the current foundation:
+
+- Backend `GET /v1/ice-config` requires a bearer session and returns STUN-only ICE config.
+- `TokiAPIClient.iceConfig(sessionToken:)` validates the response before returning it to app code.
+- `StrictP2PICEPolicy` rejects TURN URLs, relay policy changes, and relay ICE candidates.
+- `PeerConnectionManager` creates peer connections from `room.snapshot`, uses lexicographic device IDs for deterministic offerer selection, forwards offer/answer/candidate signaling over the realtime transport, and closes all peer connections when leaving or switching rooms.
+
+Still intentionally pending until the native WebRTC dependency is selected and wired:
+
+- Real native WebRTC peer connection creation.
+- Microphone track attachment from the floor-controlled PTT flow.
+- Remote audio playback through selected output devices.
+- Manual two-client LAN and restrictive-network media tests.
 
 ## Verification Notes
 
 The backend realtime channel intentionally avoids audio paths. Re-check this before merging any future WebRTC, replay, diagnostics, or observability changes.
 
-CI runs the full Swift package tests and Go backend tests on pull requests. Local Go verification requires Go 1.22 or newer to be installed.
+CI runs the full Swift package tests and Go backend tests on pull requests. The phase-04 automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.

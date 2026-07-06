@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"toki/internal/httpapi"
@@ -147,6 +148,36 @@ func TestGroupConversationMaximumTenParticipants(t *testing.T) {
 
 	if res := postJSON(t, srv, "/v1/conversations/"+group.ID+"/members", map[string]any{"memberIds": []string{memberIDs[9]}}, alice.Token); res.Code != http.StatusBadRequest {
 		t.Fatalf("adding eleventh group member status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+}
+
+func TestIceConfigRequiresSessionAndReturnsStunOnlyRelayDisabled(t *testing.T) {
+	srv := newTestServer(t, "alice@example.com")
+
+	if res := get(t, srv, "/v1/ice-config", ""); res.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated ice config status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+
+	alice := signIn(t, srv, "alice@example.com")
+	iceConfig := decodeResponse[struct {
+		RelayPolicy string `json:"relayPolicy"`
+		ICEServers  []struct {
+			URLs []string `json:"urls"`
+		} `json:"iceServers"`
+	}](t, get(t, srv, "/v1/ice-config", alice.Token))
+
+	if iceConfig.RelayPolicy != "disabled" {
+		t.Fatalf("relay policy = %q, want disabled", iceConfig.RelayPolicy)
+	}
+	if len(iceConfig.ICEServers) == 0 {
+		t.Fatal("ice config has no STUN servers")
+	}
+	for _, server := range iceConfig.ICEServers {
+		for _, url := range server.URLs {
+			if !strings.HasPrefix(url, "stun:") {
+				t.Fatalf("ice server url = %q, want STUN-only", url)
+			}
+		}
 	}
 }
 

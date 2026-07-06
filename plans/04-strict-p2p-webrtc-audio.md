@@ -63,3 +63,22 @@
 - Manual test two Macs or two local clients on the same LAN.
 - Manual failure test on a restrictive network or with blocked UDP to verify user-facing P2P failure state.
 - Inspect backend request logs and WebSocket handlers to confirm no raw audio path exists.
+
+## Implementation Status
+
+Completed in `codex-strict-p2p-webrtc-audio-foundation`:
+
+- Authenticated `GET /v1/ice-config` returning STUN-only URLs and `relayPolicy: "disabled"`.
+- Swift strict ICE policy validation for TURN URLs, relay policy changes, and relay candidates.
+- Client API integration for fetching and validating ICE config.
+- Protocol-backed `PeerConnectionManager` for active-room peer tracking, deterministic offer selection, signaling envelope forwarding, publishing toggles, and room cleanup.
+- Automated Swift tests for strict ICE validation, client fetch/validation, room snapshot decoding, peer mesh setup, signaling, and cleanup.
+- Automated Go test coverage for the backend ICE config endpoint.
+
+Remaining for the next implementation pass:
+
+- Select and integrate the native WebRTC dependency.
+- Create real peer connections from `PeerConnectionManager`.
+- Attach microphone tracks only from the floor-controlled PTT flow.
+- Receive remote audio tracks and route them to selected output devices.
+- Complete two-client LAN and restrictive-network manual verification.
