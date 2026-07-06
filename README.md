@@ -11,7 +11,8 @@ The media policy is strict peer-to-peer for the MVP. The backend may coordinate 
 - Storage: PostgreSQL metadata migration in `migrations/001_metadata.sql`; current backend tests use an in-memory store.
 - Auth: invited-email development magic-link flow, bearer session token, client-side Keychain token storage.
 - Conversations: signed-in users can list conversations, create direct/group conversations, and add group members.
-- Realtime: authenticated `/v1/realtime` WebSocket for active-room presence and WebRTC signaling metadata.
+- Realtime: authenticated `/v1/realtime` WebSocket for active-room presence, WebRTC signaling metadata, and one-speaker floor control.
+- PTT floor control: backend grants one ephemeral floor token per conversation, denies concurrent speakers, and clears held floors on release, disconnect, timeout, or backend restart.
 - Strict P2P media foundation: authenticated STUN-only ICE config, client-side TURN/relay rejection, and a protocol-backed peer connection manager for active-room mesh setup.
 
 ## Product Constraints
@@ -100,11 +101,21 @@ Realtime messages use a JSON envelope:
 }
 ```
 
-Client event types are `room.join`, `room.leave`, `presence.set`, `signal.offer`, `signal.answer`, and `signal.iceCandidate`.
+Client event types are `room.join`, `room.leave`, `presence.set`, `signal.offer`, `signal.answer`, `signal.iceCandidate`, `floor.request`, and `floor.release`.
 
-Server event types are `room.snapshot`, `presence.updated`, `signal.forwarded`, `error`, and `reconnect.required`.
+Server event types are `room.snapshot`, `presence.updated`, `signal.forwarded`, `floor.granted`, `floor.denied`, `floor.released`, `floor.changed`, `error`, and `reconnect.required`.
+
+Floor-control payloads:
+
+- `floor.request`: `{ "conversationId": "...", "deviceId": "..." }`
+- `floor.granted`: `{ "conversationId": "...", "tokenId": "...", "speakerUserId": "...", "speakerDeviceId": "...", "grantedAt": "..." }`
+- `floor.denied`: `{ "conversationId": "...", "reason": "busy" }`
+- `floor.release`: `{ "conversationId": "...", "tokenId": "..." }`
+- `floor.released`: `{ "conversationId": "...", "tokenId": "...", "reason": "released|disconnect|timeout|server_reset" }`
 
 The WebSocket carries presence, room membership, and WebRTC signaling bodies only. It must not carry raw audio frames. Signaling is forwarded only between devices currently joined to the same authorized conversation. The client rejects ICE configs with TURN URLs, non-disabled relay policy, or relay ICE candidates.
+
+PTT press requests the floor but does not enable microphone publishing. Publishing is allowed only after `floor.granted` gives the local user a token, and release/reconnect/timeout paths stop local publishing before or regardless of whether the backend receives the release.
 
 ## Strict P2P WebRTC Status
 
@@ -114,6 +125,7 @@ Implemented in the current foundation:
 - `TokiAPIClient.iceConfig(sessionToken:)` validates the response before returning it to app code.
 - `StrictP2PICEPolicy` rejects TURN URLs, relay policy changes, and relay ICE candidates.
 - `PeerConnectionManager` creates peer connections from `room.snapshot`, uses lexicographic device IDs for deterministic offerer selection, forwards offer/answer/candidate signaling over the realtime transport, and closes all peer connections when leaving or switching rooms.
+- `AppSessionState` gates local microphone publishing on a valid local floor token, and `PeerConnectionManager.applyFloor` enables peer publishing only for a local grant.
 
 Still intentionally pending until the native WebRTC dependency is selected and wired:
 
@@ -126,4 +138,4 @@ Still intentionally pending until the native WebRTC dependency is selected and w
 
 The backend realtime channel intentionally avoids audio paths. Re-check this before merging any future WebRTC, replay, diagnostics, or observability changes.
 
-CI runs the full Swift package tests and Go backend tests on pull requests. The phase-04 automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.
+CI runs the full Swift package tests and Go backend tests on pull requests. The current automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, token-aware PTT floor state, realtime floor request/release encoding, backend floor grant/deny/release/disconnect/timeout behavior, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.

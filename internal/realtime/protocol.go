@@ -15,6 +15,12 @@ const (
 	EventSignalAnswer       = "signal.answer"
 	EventSignalICECandidate = "signal.iceCandidate"
 	EventSignalForwarded    = "signal.forwarded"
+	EventFloorRequest       = "floor.request"
+	EventFloorGranted       = "floor.granted"
+	EventFloorDenied        = "floor.denied"
+	EventFloorRelease       = "floor.release"
+	EventFloorReleased      = "floor.released"
+	EventFloorChanged       = "floor.changed"
 	EventError              = "error"
 	EventReconnectRequired  = "reconnect.required"
 )
@@ -52,8 +58,9 @@ type presencePayload struct {
 }
 
 type floorPayload struct {
-	State           string  `json:"state"`
-	ActiveSpeakerID *string `json:"activeSpeakerId"`
+	State                 string  `json:"state"`
+	ActiveSpeakerID       *string `json:"activeSpeakerId,omitempty"`
+	ActiveSpeakerDeviceID *string `json:"activeSpeakerDeviceId,omitempty"`
 }
 
 type roomSnapshotPayload struct {
@@ -75,4 +82,43 @@ type presenceUpdatedPayload struct {
 type errorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+type floorRequestPayload struct {
+	ConversationID string `json:"conversationId"`
+	DeviceID       string `json:"deviceId"`
+}
+
+type floorGrantPayload struct {
+	ConversationID  string    `json:"conversationId"`
+	TokenID         string    `json:"tokenId"`
+	SpeakerUserID   string    `json:"speakerUserId"`
+	SpeakerDeviceID string    `json:"speakerDeviceId"`
+	GrantedAt       time.Time `json:"grantedAt"`
+}
+
+type floorDeniedPayload struct {
+	ConversationID  string  `json:"conversationId"`
+	Reason          string  `json:"reason"`
+	SpeakerUserID   *string `json:"speakerUserId,omitempty"`
+	SpeakerDeviceID *string `json:"speakerDeviceId,omitempty"`
+}
+
+type floorReleasePayload struct {
+	ConversationID string `json:"conversationId"`
+	TokenID        string `json:"tokenId"`
+}
+
+type floorReleasedPayload struct {
+	ConversationID string `json:"conversationId"`
+	TokenID        string `json:"tokenId"`
+	Reason         string `json:"reason"`
+}
+
+type floorChangedPayload struct {
+	ConversationID  string `json:"conversationId"`
+	State           string `json:"state"`
+	SpeakerUserID   string `json:"speakerUserId,omitempty"`
+	SpeakerDeviceID string `json:"speakerDeviceId,omitempty"`
+	Reason          string `json:"reason,omitempty"`
 }

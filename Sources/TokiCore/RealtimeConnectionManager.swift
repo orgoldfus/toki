@@ -172,6 +172,30 @@ public final class RealtimeConnectionManager<EventID: RealtimeEventIDGenerating>
         state = .listening(conversationID: conversationID)
     }
 
+    public func requestFloor(conversationID: ConversationID, deviceID: DeviceID) async throws {
+        let payload = FloorRequestPayload(conversationID: conversationID, deviceID: deviceID)
+        let envelope = RealtimeEventEnvelope(
+            type: .floorRequest,
+            id: eventID.nextEventID(),
+            conversationID: conversationID,
+            sentAt: clock.now(),
+            payload: payload
+        )
+        try await transport.send(AnyRealtimeEventEnvelope(envelope))
+    }
+
+    public func releaseFloor(conversationID: ConversationID, tokenID: FloorTokenID) async throws {
+        let payload = FloorReleasePayload(conversationID: conversationID, tokenID: tokenID)
+        let envelope = RealtimeEventEnvelope(
+            type: .floorRelease,
+            id: eventID.nextEventID(),
+            conversationID: conversationID,
+            sentAt: clock.now(),
+            payload: payload
+        )
+        try await transport.send(AnyRealtimeEventEnvelope(envelope))
+    }
+
     public func handleConnectionDropped() async {
         reconnectAttempt += 1
         state = .reconnecting(attempt: reconnectAttempt)

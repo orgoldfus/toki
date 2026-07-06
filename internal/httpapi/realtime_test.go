@@ -157,6 +157,76 @@ func TestRealtimeSignalingIsForwardedOnlyInsideJoinedRoom(t *testing.T) {
 	}
 }
 
+func TestRealtimeFloorControlRequiresJoinedRoomAndAllowsOneSpeaker(t *testing.T) {
+	srv := httptest.NewServer(newTestServer(t, "alice@example.com", "bob@example.com"))
+	defer srv.Close()
+
+	alice := signIn(t, srv.Config.Handler, "alice@example.com")
+	bob := signIn(t, srv.Config.Handler, "bob@example.com")
+	conversation := decodeResponse[createConversationResponse](t, postJSON(t, srv.Config.Handler, "/v1/conversations", map[string]any{
+		"type":      "direct",
+		"memberIds": []string{bob.UserID},
+	}, alice.Token)).Conversation
+
+	aliceWS := dialWebSocket(t, srv.URL, "/v1/realtime", alice.Token)
+	defer aliceWS.Close()
+	bobWS := dialWebSocket(t, srv.URL, "/v1/realtime", bob.Token)
+	defer bobWS.Close()
+
+	writeFloorRequest(t, aliceWS, conversation.ID, alice.DeviceID, "alice-floor-before-join")
+	errorEvent := aliceWS.ReadJSON(t)
+	if errorEvent["type"] != "error" || errorEvent["conversationId"] != conversation.ID {
+		t.Fatalf("floor before join event = %+v, want conversation error", errorEvent)
+	}
+	if payload := errorEvent["payload"].(map[string]any); payload["code"] != "not_joined" {
+		t.Fatalf("floor before join error payload = %+v, want not_joined", payload)
+	}
+
+	joinRoom(t, aliceWS, conversation.ID, "alice-join")
+	joinRoom(t, bobWS, conversation.ID, "bob-join")
+	if presence := aliceWS.ReadJSON(t); presence["type"] != "presence.updated" {
+		t.Fatalf("alice event after bob join = %+v, want presence.updated", presence)
+	}
+
+	writeFloorRequest(t, aliceWS, conversation.ID, alice.DeviceID, "alice-floor")
+	granted := aliceWS.ReadJSON(t)
+	if granted["type"] != "floor.granted" {
+		t.Fatalf("alice floor event = %+v, want floor.granted", granted)
+	}
+	grantPayload := granted["payload"].(map[string]any)
+	tokenID, _ := grantPayload["tokenId"].(string)
+	if tokenID == "" || grantPayload["speakerUserId"] != alice.UserID || grantPayload["speakerDeviceId"] != alice.DeviceID {
+		t.Fatalf("grant payload = %+v, want alice token", grantPayload)
+	}
+	if changed := bobWS.ReadJSON(t); changed["type"] != "floor.changed" {
+		t.Fatalf("bob event after alice grant = %+v, want floor.changed", changed)
+	}
+
+	writeFloorRequest(t, bobWS, conversation.ID, bob.DeviceID, "bob-floor")
+	denied := bobWS.ReadJSON(t)
+	if denied["type"] != "floor.denied" {
+		t.Fatalf("bob floor event = %+v, want floor.denied", denied)
+	}
+	if payload := denied["payload"].(map[string]any); payload["reason"] != "busy" || payload["speakerUserId"] != alice.UserID {
+		t.Fatalf("denied payload = %+v, want busy with alice speaker", payload)
+	}
+
+	bobWS.Close()
+	released := aliceWS.ReadJSON(t)
+	if released["type"] != "presence.updated" {
+		t.Fatalf("alice event after bob close = %+v, want presence.updated", released)
+	}
+
+	writeFloorRelease(t, aliceWS, conversation.ID, tokenID, "alice-release")
+	released = aliceWS.ReadJSON(t)
+	if released["type"] != "floor.released" {
+		t.Fatalf("alice release event = %+v, want floor.released", released)
+	}
+	if payload := released["payload"].(map[string]any); payload["tokenId"] != tokenID || payload["reason"] != "released" {
+		t.Fatalf("released payload = %+v, want token released", payload)
+	}
+}
+
 func joinRoom(t *testing.T, ws *testWebSocket, conversationID string, eventID string) {
 	t.Helper()
 
@@ -170,6 +240,36 @@ func joinRoom(t *testing.T, ws *testWebSocket, conversationID string, eventID st
 	if event := ws.ReadJSON(t); event["type"] != "room.snapshot" {
 		t.Fatalf("join event type = %v, want room.snapshot", event["type"])
 	}
+}
+
+func writeFloorRequest(t *testing.T, ws *testWebSocket, conversationID string, deviceID string, eventID string) {
+	t.Helper()
+
+	ws.WriteJSON(t, map[string]any{
+		"type":           "floor.request",
+		"id":             eventID,
+		"conversationId": conversationID,
+		"sentAt":         time.Now().UTC().Format(time.RFC3339Nano),
+		"payload": map[string]any{
+			"conversationId": conversationID,
+			"deviceId":       deviceID,
+		},
+	})
+}
+
+func writeFloorRelease(t *testing.T, ws *testWebSocket, conversationID string, tokenID string, eventID string) {
+	t.Helper()
+
+	ws.WriteJSON(t, map[string]any{
+		"type":           "floor.release",
+		"id":             eventID,
+		"conversationId": conversationID,
+		"sentAt":         time.Now().UTC().Format(time.RFC3339Nano),
+		"payload": map[string]any{
+			"conversationId": conversationID,
+			"tokenId":        tokenID,
+		},
+	})
 }
 
 type testWebSocket struct {

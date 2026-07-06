@@ -117,6 +117,16 @@ public final class PeerConnectionManager<EventID: RealtimeEventIDGenerating>: @u
         isPublishing = enabled
     }
 
+    public func applyFloor(_ floor: FloorState, localUserID: UserID) async throws {
+        let enabled: Bool
+        if case .granted(let speakerID, _) = floor, speakerID == localUserID {
+            enabled = true
+        } else {
+            enabled = false
+        }
+        try await setPublishingEnabled(enabled)
+    }
+
     public func leaveRoom() async {
         await closeConnections()
         activeConversationID = nil

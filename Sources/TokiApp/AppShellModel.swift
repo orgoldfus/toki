@@ -131,6 +131,7 @@ final class AppShellModel: ObservableObject {
     @Published private(set) var menuBarStatus: MenuBarStatus = .signedOut
     @Published private(set) var activityLabel = "Signed out"
     @Published private(set) var detailStatus = "Select a room to listen."
+    @Published private(set) var activeSpeakerLabel: String?
     @Published private(set) var canUseManualPTT = false
     @Published private(set) var canUseKeyboardPTT = false
     @Published private(set) var rooms: [RoomSummary] = []
@@ -213,6 +214,7 @@ final class AppShellModel: ObservableObject {
         menuBarStatus = .signedOut
         activityLabel = "Signed out"
         detailStatus = "Open Toki to join a room."
+        activeSpeakerLabel = nil
         canUseManualPTT = false
         canUseKeyboardPTT = false
     }
@@ -298,7 +300,7 @@ final class AppShellModel: ObservableObject {
 
     func simulateRemoteSpeaker() {
         guard let session else { return }
-        session.floorGrantReceived(speakerID: UserID("teammate"))
+        session.floorGrantReceived(tokenID: FloorTokenID("simulated-remote-floor"), speakerID: UserID("teammate"))
         syncFromSession()
     }
 
@@ -369,7 +371,7 @@ final class AppShellModel: ObservableObject {
                 return
             }
 
-            self.session?.floorGrantReceived(speakerID: session.localUserID)
+            self.session?.floorGrantReceived(tokenID: FloorTokenID("simulated-local-floor"), speakerID: session.localUserID)
             self.syncFromSession()
         }
     }
@@ -381,6 +383,7 @@ final class AppShellModel: ObservableObject {
         canUseKeyboardPTT = session.canStartPushToTalk(source: .keyboard)
         menuBarStatus = resolveMenuBarStatus(session: session)
         activityLabel = resolveActivityLabel(session: session)
+        activeSpeakerLabel = resolveActiveSpeakerLabel(session: session)
         detailStatus = resolveDetailStatus(session: session)
     }
 
@@ -449,7 +452,11 @@ final class AppShellModel: ObservableObject {
         case .speaking:
             "PTT is held. Release to stop transmitting."
         case .floorBusy:
-            "Another teammate has the floor."
+            if let activeSpeakerLabel {
+                "\(activeSpeakerLabel) has the floor."
+            } else {
+                "Another teammate has the floor."
+            }
         case .reconnecting:
             "Realtime link dropped. Rejoin the room when connected."
         case .p2pUnavailable:
@@ -460,6 +467,15 @@ final class AppShellModel: ObservableObject {
             "Global shortcut access is unavailable. Manual PTT still works."
         @unknown default:
             "Connected."
+        }
+    }
+
+    private func resolveActiveSpeakerLabel(session: AppSessionState) -> String? {
+        switch session.floor {
+        case .granted(let speakerID, _), .busy(let speakerID):
+            speakerID == currentUserID ? "You" : speakerID.rawValue
+        case .idle, .requesting, .blocked:
+            nil
         }
     }
 

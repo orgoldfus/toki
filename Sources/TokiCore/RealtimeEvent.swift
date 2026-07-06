@@ -10,6 +10,12 @@ public enum RealtimeEventType: String, Codable, Equatable, Sendable {
     case signalAnswer = "signal.answer"
     case signalIceCandidate = "signal.iceCandidate"
     case signalForwarded = "signal.forwarded"
+    case floorRequest = "floor.request"
+    case floorGranted = "floor.granted"
+    case floorDenied = "floor.denied"
+    case floorRelease = "floor.release"
+    case floorReleased = "floor.released"
+    case floorChanged = "floor.changed"
     case error
     case reconnectRequired = "reconnect.required"
 }
@@ -52,6 +58,123 @@ public struct RoomJoinPayload: Codable, Equatable, Sendable {
     }
 }
 
+public struct FloorRequestPayload: Codable, Equatable, Sendable {
+    public let conversationID: ConversationID
+    public let deviceID: DeviceID
+
+    public init(conversationID: ConversationID, deviceID: DeviceID) {
+        self.conversationID = conversationID
+        self.deviceID = deviceID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case conversationID = "conversationId"
+        case deviceID = "deviceId"
+    }
+}
+
+public struct FloorGrantedPayload: Codable, Equatable, Sendable {
+    public let conversationID: ConversationID
+    public let tokenID: FloorTokenID
+    public let speakerUserID: UserID
+    public let speakerDeviceID: DeviceID
+    public let grantedAt: Date
+
+    public init(
+        conversationID: ConversationID,
+        tokenID: FloorTokenID,
+        speakerUserID: UserID,
+        speakerDeviceID: DeviceID,
+        grantedAt: Date
+    ) {
+        self.conversationID = conversationID
+        self.tokenID = tokenID
+        self.speakerUserID = speakerUserID
+        self.speakerDeviceID = speakerDeviceID
+        self.grantedAt = grantedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case conversationID = "conversationId"
+        case tokenID = "tokenId"
+        case speakerUserID = "speakerUserId"
+        case speakerDeviceID = "speakerDeviceId"
+        case grantedAt
+    }
+}
+
+public enum FloorDeniedReason: String, Codable, Equatable, Sendable {
+    case busy
+    case notJoined = "not_joined"
+    case forbidden
+}
+
+public struct FloorDeniedPayload: Codable, Equatable, Sendable {
+    public let conversationID: ConversationID
+    public let reason: FloorDeniedReason
+    public let speakerUserID: UserID?
+    public let speakerDeviceID: DeviceID?
+
+    public init(
+        conversationID: ConversationID,
+        reason: FloorDeniedReason,
+        speakerUserID: UserID? = nil,
+        speakerDeviceID: DeviceID? = nil
+    ) {
+        self.conversationID = conversationID
+        self.reason = reason
+        self.speakerUserID = speakerUserID
+        self.speakerDeviceID = speakerDeviceID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case conversationID = "conversationId"
+        case reason
+        case speakerUserID = "speakerUserId"
+        case speakerDeviceID = "speakerDeviceId"
+    }
+}
+
+public struct FloorReleasePayload: Codable, Equatable, Sendable {
+    public let conversationID: ConversationID
+    public let tokenID: FloorTokenID
+
+    public init(conversationID: ConversationID, tokenID: FloorTokenID) {
+        self.conversationID = conversationID
+        self.tokenID = tokenID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case conversationID = "conversationId"
+        case tokenID = "tokenId"
+    }
+}
+
+public enum FloorReleasedReason: String, Codable, Equatable, Sendable {
+    case released
+    case disconnect
+    case timeout
+    case serverReset = "server_reset"
+}
+
+public struct FloorReleasedPayload: Codable, Equatable, Sendable {
+    public let conversationID: ConversationID
+    public let tokenID: FloorTokenID
+    public let reason: FloorReleasedReason
+
+    public init(conversationID: ConversationID, tokenID: FloorTokenID, reason: FloorReleasedReason) {
+        self.conversationID = conversationID
+        self.tokenID = tokenID
+        self.reason = reason
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case conversationID = "conversationId"
+        case tokenID = "tokenId"
+        case reason
+    }
+}
+
 public struct AnyRealtimeEventEnvelope: Codable, Equatable, Sendable {
     public let type: RealtimeEventType
     public let id: String
@@ -80,6 +203,32 @@ public struct AnyRealtimeEventEnvelope: Codable, Equatable, Sendable {
             conversationID: envelope.conversationID,
             sentAt: envelope.sentAt,
             payload: .object(["active": .bool(envelope.payload.active)])
+        )
+    }
+
+    public init(_ envelope: RealtimeEventEnvelope<FloorRequestPayload>) {
+        self.init(
+            type: envelope.type,
+            id: envelope.id,
+            conversationID: envelope.conversationID,
+            sentAt: envelope.sentAt,
+            payload: .object([
+                "conversationId": .string(envelope.payload.conversationID.rawValue),
+                "deviceId": .string(envelope.payload.deviceID.rawValue)
+            ])
+        )
+    }
+
+    public init(_ envelope: RealtimeEventEnvelope<FloorReleasePayload>) {
+        self.init(
+            type: envelope.type,
+            id: envelope.id,
+            conversationID: envelope.conversationID,
+            sentAt: envelope.sentAt,
+            payload: .object([
+                "conversationId": .string(envelope.payload.conversationID.rawValue),
+                "tokenId": .string(envelope.payload.tokenID.rawValue)
+            ])
         )
     }
 

@@ -77,6 +77,8 @@ final class AppShellSmokeTests: XCTestCase {
         model.stopPushToTalk()
         model.simulateRemoteSpeaker()
         XCTAssertEqual(model.menuBarStatus, .floorBusy)
+        XCTAssertEqual(model.activeSpeakerLabel, "teammate")
+        XCTAssertEqual(model.detailStatus, "teammate has the floor.")
 
         model.permissionPreset = .microphoneDenied
         model.startManualPushToTalk()

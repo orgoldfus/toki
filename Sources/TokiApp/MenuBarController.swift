@@ -36,6 +36,9 @@ final class MenuBarController {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: model.activityLabel, action: nil, keyEquivalent: ""))
+        if let activeSpeakerLabel = model.activeSpeakerLabel {
+            menu.addItem(NSMenuItem(title: "Speaker: \(activeSpeakerLabel)", action: nil, keyEquivalent: ""))
+        }
         menu.addItem(.separator())
 
         let openItem = NSMenuItem(title: "Open Toki", action: #selector(openToki), keyEquivalent: "")

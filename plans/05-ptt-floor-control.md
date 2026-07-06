@@ -27,19 +27,19 @@
 
 ## Implementation Steps
 
-- [ ] Define floor event payloads with conversation ID, user ID, device ID, token ID, and server timestamp.
-- [ ] Implement `floor.request` handling with membership and active-room validation.
-- [ ] Grant the floor only if the conversation has no current speaker.
-- [ ] Deny the floor with reason `busy` when another device holds it.
-- [ ] Broadcast `floor.granted` to requester and `presence.updated` or `floor.changed` to listeners.
-- [ ] Implement `floor.release` requiring the current token ID.
-- [ ] Release the floor automatically when the speaking socket disconnects.
-- [ ] Add a maximum continuous hold duration for safety, such as 5 minutes, then release with reason `timeout`.
-- [ ] On client PTT press, enter requesting state and send `floor.request`.
-- [ ] Only after `floor.granted`, call `PeerConnectionManager.setPublishingEnabled(true)`.
-- [ ] On PTT release, immediately stop publishing locally and send `floor.release`.
-- [ ] If release cannot reach the backend, keep local publishing stopped and let server timeout or disconnect cleanup clear remote state.
-- [ ] Show the active speaker in the active room and menu bar while floor is held.
+- [x] Define floor event payloads with conversation ID, user ID, device ID, token ID, and server timestamp.
+- [x] Implement `floor.request` handling with membership and active-room validation.
+- [x] Grant the floor only if the conversation has no current speaker.
+- [x] Deny the floor with reason `busy` when another device holds it.
+- [x] Broadcast `floor.granted` to requester and `presence.updated` or `floor.changed` to listeners.
+- [x] Implement `floor.release` requiring the current token ID.
+- [x] Release the floor automatically when the speaking socket disconnects.
+- [x] Add a maximum continuous hold duration for safety, such as 5 minutes, then release with reason `timeout`.
+- [x] On client PTT press, enter requesting state and send `floor.request`.
+- [x] Only after `floor.granted`, call `PeerConnectionManager.setPublishingEnabled(true)`.
+- [x] On PTT release, immediately stop publishing locally and send `floor.release`.
+- [x] If release cannot reach the backend, keep local publishing stopped and let server timeout or disconnect cleanup clear remote state.
+- [x] Show the active speaker in the active room and menu bar while floor is held.
 
 ## Interfaces
 

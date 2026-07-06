@@ -22,7 +22,7 @@ public enum FloorBlockReason: Equatable, Sendable {
 public enum FloorState: Equatable, Sendable {
     case idle
     case requesting(localUserID: UserID)
-    case granted(speakerID: UserID)
+    case granted(speakerID: UserID, tokenID: FloorTokenID)
     case busy(speakerID: UserID)
     case blocked(reason: FloorBlockReason)
 }
@@ -57,6 +57,8 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
     @Published public private(set) var floor: FloorState
     @Published public private(set) var activity: SessionActivity
     @Published public private(set) var devicePreferences: DevicePreferences
+    @Published public private(set) var shouldPublishMicrophone = false
+    @Published public private(set) var lastReleasedFloorTokenID: FloorTokenID?
 
     private let permissions: PermissionCoordinating
     private var isPushToTalkActive = false
@@ -159,23 +161,52 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
         }
 
         isPushToTalkActive = true
+        shouldPublishMicrophone = false
+        lastReleasedFloorTokenID = nil
         floor = .requesting(localUserID: localUserID)
         activity = .requestingFloor
     }
 
-    public func floorGrantReceived(speakerID: UserID) {
+    public func floorGrantReceived(tokenID: FloorTokenID, speakerID: UserID) {
         if speakerID == localUserID && isPushToTalkActive {
-            floor = .granted(speakerID: speakerID)
+            floor = .granted(speakerID: speakerID, tokenID: tokenID)
             activity = .speaking
+            shouldPublishMicrophone = true
             return
         }
 
+        shouldPublishMicrophone = false
         floor = .busy(speakerID: speakerID)
         activity = .floorBusy
     }
 
+    public func floorDeniedReceived(reason: FloorDeniedReason, speakerID: UserID? = nil) {
+        isPushToTalkActive = false
+        shouldPublishMicrophone = false
+        switch reason {
+        case .busy:
+            floor = .busy(speakerID: speakerID ?? localUserID)
+            activity = .floorBusy
+        case .notJoined, .forbidden:
+            floor = .idle
+            activity = activeConversationID == nil ? .idle : .listening
+        }
+    }
+
+    public func floorReleasedReceived(tokenID: FloorTokenID, reason: FloorReleasedReason) {
+        _ = tokenID
+        _ = reason
+        shouldPublishMicrophone = false
+        floor = .idle
+        activity = activeConversationID == nil ? .idle : .listening
+    }
+
     public func pushToTalkReleased() {
         isPushToTalkActive = false
+        if case .granted(let speakerID, let tokenID) = floor, speakerID == localUserID {
+            lastReleasedFloorTokenID = tokenID
+        }
+        shouldPublishMicrophone = false
 
         guard activeConversationID != nil else {
             floor = .idle
@@ -192,14 +223,21 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
 
         switch state {
         case .disconnected:
+            shouldPublishMicrophone = false
+            floor = .idle
             activity = .idle
         case .connected:
+            shouldPublishMicrophone = false
             activity = .connected
         case .listening:
             activity = activeConversationID == nil ? .idle : .listening
         case .reconnecting:
+            shouldPublishMicrophone = false
+            floor = .idle
             activity = .reconnecting
         case .p2pUnavailable:
+            shouldPublishMicrophone = false
+            floor = .idle
             activity = .p2pUnavailable
         }
     }
