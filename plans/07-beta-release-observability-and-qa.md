@@ -29,17 +29,17 @@
 
 ## Implementation Steps
 
-- [ ] Create release configuration for Developer ID signing.
-- [ ] Add notarization workflow documentation and local verification commands.
-- [ ] Add auto-update feed configuration for beta builds.
-- [ ] Add app version, build number, and update channel display in settings.
-- [ ] Add structured client logs for state transitions: auth, realtime, room join, floor, peer connection, permission, and device fallback.
-- [ ] Redact or omit sensitive fields from logs: tokens, emails where unnecessary, SDP bodies, ICE candidates, audio data, and replay buffers.
-- [ ] Add backend structured logs for request IDs, user IDs, team IDs, conversation IDs, event types, and failure reasons.
-- [ ] Add a diagnostics export that includes metadata only and requires explicit user action.
-- [ ] Add crash reporting only if it can be configured to exclude audio buffers and sensitive payloads.
-- [ ] Build a QA matrix covering fresh install, permissions denied, two-user LAN call, 10-person room, simultaneous PTT, reconnect, backend restart, device unplug, and restrictive network failure.
-- [ ] Add a final pre-beta checklist requiring explicit confirmation that TURN and server media are disabled.
+- [x] Create release configuration for Developer ID signing.
+- [x] Add notarization workflow documentation and local verification commands.
+- [x] Add auto-update feed configuration for beta builds.
+- [x] Add app version, build number, and update channel display in settings.
+- [x] Add structured client logs for state transitions: auth, realtime, room join, floor, peer connection, permission, and device fallback.
+- [x] Redact or omit sensitive fields from logs: tokens, emails where unnecessary, SDP bodies, ICE candidates, audio data, and replay buffers.
+- [x] Add backend structured logs for request IDs, user IDs, team IDs, conversation IDs, event types, and failure reasons.
+- [x] Add a diagnostics export that includes metadata only and requires explicit user action.
+- [x] Add crash reporting only if it can be configured to exclude audio buffers and sensitive payloads. Crash reporting remains disabled until a provider is selected and verified against the privacy exclusions.
+- [x] Build a QA matrix covering fresh install, permissions denied, two-user LAN call, 10-person room, simultaneous PTT, reconnect, backend restart, device unplug, and restrictive network failure.
+- [x] Add a final pre-beta checklist requiring explicit confirmation that TURN and server media are disabled.
 
 ## Interfaces
 

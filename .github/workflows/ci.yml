@@ -50,3 +50,15 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+  pre-beta-policy:
+    name: Pre-Beta Policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check strict P2P and privacy policy
+        run: scripts/check-prebeta-policy.sh

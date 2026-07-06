@@ -15,6 +15,7 @@ The media policy is strict peer-to-peer for the MVP. The backend may coordinate 
 - PTT floor control: backend grants one ephemeral floor token per conversation, denies concurrent speakers, and clears held floors on release, disconnect, timeout, or backend restart.
 - Strict P2P media foundation: authenticated STUN-only ICE config, client-side TURN/relay rejection, and a protocol-backed peer connection manager for active-room mesh setup.
 - Local audio controls: dynamic microphone/output device selection, mic test/input level state, active-speaker output level state, and local-only replay state capped at 2 minutes.
+- Beta release readiness: Developer ID/notarization runbook, beta appcast template, metadata-only diagnostics models, structured privacy-safe backend request logging, QA matrix, and a CI pre-beta policy check.
 
 ## Product Constraints
 
@@ -48,6 +49,12 @@ Run the backend test suite when Go is installed:
 
 ```bash
 rtk go test ./...
+```
+
+Run the pre-beta strict P2P/privacy policy check:
+
+```bash
+rtk scripts/check-prebeta-policy.sh
 ```
 
 Run the realtime-focused Swift tests:
@@ -128,6 +135,7 @@ Implemented in the current foundation:
 - `StrictP2PICEPolicy` rejects TURN URLs, relay policy changes, and relay ICE candidates.
 - `PeerConnectionManager` creates peer connections from `room.snapshot`, uses lexicographic device IDs for deterministic offerer selection, forwards offer/answer/candidate signaling over the realtime transport, and closes all peer connections when leaving or switching rooms.
 - `AppSessionState` gates local microphone publishing on a valid local floor token, and `PeerConnectionManager.applyFloor` enables peer publishing only for a local grant.
+- `scripts/check-prebeta-policy.sh` runs in CI and verifies the release config keeps TURN and server media disabled while checking runtime paths for forbidden relay or server-media terms.
 
 Still intentionally pending until the native WebRTC dependency is selected and wired:
 
@@ -150,8 +158,19 @@ Implemented in the current client foundation:
 
 The replay buffer is not persisted to disk, `UserDefaults`, backend APIs, logs, crash reports, analytics, or diagnostics. See [`docs/engineering/local-replay-and-audio-devices.md`](docs/engineering/local-replay-and-audio-devices.md) for the implementation contract.
 
+## Beta Release And Diagnostics
+
+Release readiness artifacts live under [`docs/release`](docs/release) and [`release`](release):
+
+- [`docs/release/beta-release.md`](docs/release/beta-release.md) covers Developer ID signing, notarization, beta appcast publication, backend deployment, diagnostics limits, and the pre-beta gate.
+- [`docs/release/qa-matrix.md`](docs/release/qa-matrix.md) is the manual QA matrix for install, permissions, LAN calls, 10-person rooms, simultaneous PTT, reconnect, backend restart, device unplug, restrictive-network failure, replay, diagnostics, and updates.
+- [`release/beta-release.json`](release/beta-release.json) records the beta channel defaults and strict P2P media policy.
+- [`release/beta-appcast.template.xml`](release/beta-appcast.template.xml) is the Sparkle-compatible beta feed template.
+
+The app exposes version, build, and update channel in Settings. Diagnostics exports are metadata-only and must be initiated by the user. Backend request logs are structured and redact tokens, emails, SDP, ICE candidate bodies, audio, and replay terms.
+
 ## Verification Notes
 
 The backend realtime channel intentionally avoids audio paths. Re-check this before merging any future WebRTC, replay, diagnostics, or observability changes.
 
-CI runs the full Swift package tests and Go backend tests on pull requests. The current automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, token-aware PTT floor state, realtime floor request/release encoding, local replay capacity/clearing/privacy behavior, audio device selection/fallback behavior, mic-test level behavior, app-shell replay controls, backend floor grant/deny/release/disconnect/timeout behavior, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.
+CI runs the full Swift package tests, Go backend tests, and the pre-beta policy check on pull requests. The current automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, token-aware PTT floor state, realtime floor request/release encoding, local replay capacity/clearing/privacy behavior, audio device selection/fallback behavior, mic-test level behavior, app-shell replay controls, diagnostics redaction, release readiness gates, backend floor grant/deny/release/disconnect/timeout behavior, backend privacy-safe log redaction, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.
