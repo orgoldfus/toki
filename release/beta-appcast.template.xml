@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Toki Beta Updates</title>
+    <link>https://updates.example.com/toki/beta/appcast.xml</link>
+    <description>Private beta update feed for direct-distributed Toki builds.</description>
+    <item>
+      <title>Toki __VERSION__ (__BUILD__)</title>
+      <sparkle:version>__BUILD__</sparkle:version>
+      <sparkle:shortVersionString>__VERSION__</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://updates.example.com/toki/beta/Toki-__VERSION__.zip"
+        sparkle:edSignature="__SPARKLE_ED_SIGNATURE__"
+        length="__ARCHIVE_BYTES__"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

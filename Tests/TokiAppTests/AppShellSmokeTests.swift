@@ -115,6 +115,17 @@ final class AppShellSmokeTests: XCTestCase {
         XCTAssertEqual(settingsStore.savedPreferences?.selectedInputDeviceID, "input-usb")
     }
 
+    func testReleaseMetadataIsExposedToSettings() {
+        let model = AppShellModel(
+            apiService: FakeAppShellAPIService(),
+            releaseMetadata: AppReleaseMetadata(version: "0.7.0", buildNumber: "42", updateChannel: .beta)
+        )
+
+        XCTAssertEqual(model.versionLabel, "Version 0.7.0")
+        XCTAssertEqual(model.buildLabel, "Build 42")
+        XCTAssertEqual(model.updateChannelLabel, "Beta")
+    }
+
     func testFailedConversationLoadClearsStoredSessionToken() async throws {
         let tokenStore = InMemorySessionTokenStore()
         let model = AppShellModel(

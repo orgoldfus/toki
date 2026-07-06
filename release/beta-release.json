@@ -1,0 +1,32 @@
+{
+  "channel": "beta",
+  "bundleIdentifier": "com.toki.app",
+  "signing": {
+    "method": "developer-id",
+    "identityEnvironmentVariable": "TOKI_DEVELOPER_ID_APPLICATION",
+    "notarizationProfileEnvironmentVariable": "TOKI_NOTARYTOOL_PROFILE"
+  },
+  "autoUpdate": {
+    "provider": "sparkle-compatible-appcast",
+    "feedURL": "https://updates.example.com/toki/beta/appcast.xml",
+    "minimumSystemVersion": "14.0"
+  },
+  "diagnostics": {
+    "metadataOnly": true,
+    "requiresExplicitUserAction": true,
+    "excludedPayloads": [
+      "raw-audio",
+      "local-replay-audio",
+      "sdp-bodies",
+      "ice-candidate-bodies",
+      "auth-tokens",
+      "magic-link-tokens",
+      "email-addresses"
+    ]
+  },
+  "mediaPolicy": {
+    "stunOnly": true,
+    "turnDisabled": true,
+    "serverMediaDisabled": true
+  }
+}

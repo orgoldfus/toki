@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -14,6 +15,7 @@ type Server struct {
 	store    store.Store
 	realtime *realtime.Hub
 	mux      *http.ServeMux
+	logger   *PrivacySafeLogger
 }
 
 type userResponse struct {
@@ -66,13 +68,23 @@ type conversationResponse struct {
 }
 
 func NewServer(st store.Store) http.Handler {
-	s := &Server{store: st, realtime: realtime.NewHub(st, nil), mux: http.NewServeMux()}
+	s := &Server{
+		store:    st,
+		realtime: realtime.NewHub(st, nil),
+		mux:      http.NewServeMux(),
+		logger:   NewPrivacySafeLogger(slogDefaultHandler()),
+	}
 	s.routes()
 	return s
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	recorder := &statusRecordingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+	s.mux.ServeHTTP(recorder, r)
+	s.logger.RequestCompleted(r, PrivacySafeLogFields{
+		StatusCode: recorder.statusCode,
+		EventType:  eventTypeForRequest(r),
+	})
 }
 
 func (s *Server) routes() {
@@ -363,4 +375,31 @@ func displayNameFromEmail(email string) string {
 		return "Toki User"
 	}
 	return name
+}
+
+func eventTypeForRequest(r *http.Request) string {
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/auth/magic-link":
+		return "auth.magic_link"
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/auth/session":
+		return "auth.session"
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/me":
+		return "auth.me"
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/ice-config":
+		return "media.ice_config"
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/realtime":
+		return "realtime.websocket"
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/conversations":
+		return "conversation.list"
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/conversations":
+		return "conversation.create"
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/conversations/"):
+		return "conversation.members"
+	default:
+		return "request"
+	}
+}
+
+func slogDefaultHandler() slog.Handler {
+	return slog.Default().Handler()
 }

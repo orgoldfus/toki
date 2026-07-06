@@ -224,4 +224,24 @@ final class AppSessionStateTests: XCTestCase {
         session.connectionChanged(.p2pUnavailable)
         XCTAssertEqual(session.activity, .p2pUnavailable)
     }
+
+    func testSessionRecordsPrivacySafeDiagnosticsForStateTransitions() {
+        let session = AppSessionState.mockSignedIn(microphone: .denied, inputMonitoring: .granted)
+
+        session.selectConversation(id: ConversationID("design"))
+        session.pushToTalkPressed(source: .mouse)
+        session.connectionChanged(.reconnecting)
+        session.connectionChanged(.p2pUnavailable)
+        session.signOut()
+
+        XCTAssertEqual(
+            session.diagnosticsEvents.map(\.category),
+            [.room, .permission, .realtime, .realtime, .auth]
+        )
+        XCTAssertEqual(
+            session.diagnosticsEvents.map(\.state),
+            ["room.join", "microphone.denied", "reconnecting", "p2p.unavailable", "signed.out"]
+        )
+        XCTAssertEqual(session.diagnosticsEvents.first?.conversationID, ConversationID("design"))
+    }
 }

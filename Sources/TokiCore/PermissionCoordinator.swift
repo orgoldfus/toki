@@ -6,12 +6,12 @@ import ApplicationServices
 import AVFoundation
 #endif
 
-public enum PermissionKind: Equatable, Sendable {
+public enum PermissionKind: String, Codable, Equatable, Sendable {
     case microphone
     case inputMonitoring
 }
 
-public enum PermissionStatus: Equatable, Sendable {
+public enum PermissionStatus: String, Codable, Equatable, Sendable {
     case notDetermined
     case granted
     case denied

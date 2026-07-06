@@ -41,6 +41,21 @@ struct SettingsView: View {
             Toggle("Launch At Login", isOn: $model.launchAtLogin)
             Toggle("Diagnostics Opt-In", isOn: $model.diagnosticsOptIn)
 
+            Section("Release") {
+                HStack {
+                    Text(model.versionLabel)
+                    Spacer()
+                    Text(model.buildLabel)
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Update Channel")
+                    Spacer()
+                    Text(model.updateChannelLabel)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Text("Global shortcut capture stays local in this slice. Audio transport and device activation are intentionally not implemented here.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)

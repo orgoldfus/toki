@@ -39,7 +39,7 @@ public enum SessionActivity: Equatable, Sendable {
     case permissionDenied(PermissionKind)
 }
 
-public struct PermissionState: Equatable, Sendable {
+public struct PermissionState: Codable, Equatable, Sendable {
     public let microphone: PermissionStatus
     public let inputMonitoring: PermissionStatus
 
@@ -61,6 +61,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
     @Published public private(set) var lastReleasedFloorTokenID: FloorTokenID?
     @Published public private(set) var replayAvailableDuration: TimeInterval = 0
     @Published public private(set) var lastReplayClearReason: ReplayClearReason?
+    @Published public private(set) var diagnosticsEvents: [DiagnosticsEventSummary] = []
 
     private let permissions: PermissionCoordinating
     private let replayBuffer: LocalReplayBuffer
@@ -108,6 +109,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
 
     public func updateDevicePreferences(_ preferences: DevicePreferences) {
         devicePreferences = preferences
+        recordDiagnosticsEvent(category: .deviceFallback, state: "device.preferences.updated")
     }
 
     public func selectConversation(id: ConversationID) {
@@ -118,6 +120,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
         realtimeConnection = .listening
         floor = .idle
         activity = .listening
+        recordDiagnosticsEvent(category: .room, state: "room.join")
     }
 
     public func appendReceivedAudio(_ segment: LocalAudioSegment, conversationID: ConversationID) {
@@ -146,6 +149,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
         shouldPublishMicrophone = false
         isPushToTalkActive = false
         clearReplay(reason: .signOut)
+        recordDiagnosticsEvent(category: .auth, state: "signed.out")
     }
 
     public func clearReplayForAppTermination() {
@@ -185,6 +189,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
             isPushToTalkActive = false
             floor = .blocked(reason: .microphoneDenied)
             activity = .permissionDenied(.microphone)
+            recordDiagnosticsEvent(category: .permission, state: "microphone.denied")
             return
         }
 
@@ -192,6 +197,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
             isPushToTalkActive = false
             floor = .blocked(reason: .inputMonitoringDenied)
             activity = .permissionDenied(.inputMonitoring)
+            recordDiagnosticsEvent(category: .permission, state: "input_monitoring.denied")
             return
         }
 
@@ -205,6 +211,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
         lastReleasedFloorTokenID = nil
         floor = .requesting(localUserID: localUserID)
         activity = .requestingFloor
+        recordDiagnosticsEvent(category: .floor, state: "floor.requesting")
     }
 
     public func floorGrantReceived(tokenID: FloorTokenID, speakerID: UserID) {
@@ -212,12 +219,14 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
             floor = .granted(speakerID: speakerID, tokenID: tokenID)
             activity = .speaking
             shouldPublishMicrophone = true
+            recordDiagnosticsEvent(category: .floor, state: "floor.granted")
             return
         }
 
         shouldPublishMicrophone = false
         floor = .busy(speakerID: speakerID)
         activity = .floorBusy
+        recordDiagnosticsEvent(category: .floor, state: "floor.busy")
     }
 
     public func floorDeniedReceived(reason: FloorDeniedReason, speakerID: UserID? = nil) {
@@ -231,6 +240,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
             floor = .idle
             activity = activeConversationID == nil ? .idle : .listening
         }
+        recordDiagnosticsEvent(category: .floor, state: "floor.denied.\(reason.rawValue)")
     }
 
     public func floorReleasedReceived(tokenID: FloorTokenID, reason: FloorReleasedReason) {
@@ -239,6 +249,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
         shouldPublishMicrophone = false
         floor = .idle
         activity = activeConversationID == nil ? .idle : .listening
+        recordDiagnosticsEvent(category: .floor, state: "floor.released.\(reason.rawValue)")
     }
 
     public func pushToTalkReleased() {
@@ -256,6 +267,7 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
 
         floor = .idle
         activity = .listening
+        recordDiagnosticsEvent(category: .floor, state: "floor.released.local")
     }
 
     public func connectionChanged(_ state: RealtimeConnectionState) {
@@ -280,11 +292,43 @@ public final class AppSessionState: ObservableObject, @unchecked Sendable {
             floor = .idle
             activity = .p2pUnavailable
         }
+        recordDiagnosticsEvent(category: .realtime, state: state.diagnosticsState)
     }
 
     private func clearReplay(reason: ReplayClearReason) {
         replayBuffer.clear(reason: reason)
         replayAvailableDuration = replayBuffer.availableDuration
         lastReplayClearReason = replayBuffer.lastClearReason
+    }
+
+    private func recordDiagnosticsEvent(category: DiagnosticsEventCategory, state: String) {
+        diagnosticsEvents.append(
+            DiagnosticsEventSummary(
+                category: category,
+                conversationID: activeConversationID,
+                peerID: nil,
+                state: state
+            )
+        )
+        if diagnosticsEvents.count > 200 {
+            diagnosticsEvents.removeFirst(diagnosticsEvents.count - 200)
+        }
+    }
+}
+
+private extension RealtimeConnectionState {
+    var diagnosticsState: String {
+        switch self {
+        case .disconnected:
+            "disconnected"
+        case .connected:
+            "connected"
+        case .listening:
+            "listening"
+        case .reconnecting:
+            "reconnecting"
+        case .p2pUnavailable:
+            "p2p.unavailable"
+        }
     }
 }

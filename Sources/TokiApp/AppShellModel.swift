@@ -157,6 +157,9 @@ final class AppShellModel: ObservableObject {
     @Published private(set) var isReplayPublishingMicrophone = false
     @Published private(set) var isReplayRequestingFloor = false
     @Published private(set) var lastReplaySegments: [LocalAudioSegment] = []
+    @Published private(set) var versionLabel: String
+    @Published private(set) var buildLabel: String
+    @Published private(set) var updateChannelLabel: String
 
     private let apiService: AppShellAPIService
     private let sessionTokenStore: SessionTokenStoring
@@ -175,7 +178,8 @@ final class AppShellModel: ObservableObject {
         permissionCoordinator: PermissionCoordinating = PermissionCoordinator.live(),
         settingsStore: SettingsStoring = LocalSettingsStore(defaults: .standard),
         audioDeviceProvider: AudioDeviceProviding = SystemAudioDeviceProvider(),
-        microphoneTestController: MicrophoneTestController = MicrophoneTestController()
+        microphoneTestController: MicrophoneTestController = MicrophoneTestController(),
+        releaseMetadata: AppReleaseMetadata = .current()
     ) {
         self.apiService = apiService
         self.sessionTokenStore = sessionTokenStore
@@ -183,6 +187,9 @@ final class AppShellModel: ObservableObject {
         self.settingsStore = settingsStore
         self.audioDeviceManager = AudioDeviceManager(provider: audioDeviceProvider, settingsStore: settingsStore)
         self.microphoneTestController = microphoneTestController
+        self.versionLabel = "Version \(releaseMetadata.version)"
+        self.buildLabel = "Build \(releaseMetadata.buildNumber)"
+        self.updateChannelLabel = releaseMetadata.updateChannel.label
         loadSettings()
     }
 
