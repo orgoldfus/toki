@@ -39,6 +39,82 @@ final class AppShellSmokeTests: XCTestCase {
         XCTAssertTrue(model.rooms.isEmpty)
     }
 
+    func testReplayStateClearsOnRoomSwitchAndSignOut() async throws {
+        let tokenStore = InMemorySessionTokenStore()
+        let model = AppShellModel(
+            apiService: TwoRoomAppShellAPIService(),
+            sessionTokenStore: tokenStore
+        )
+        model.signInEmail = "alice@example.com"
+        await model.signIn()
+
+        model.simulateReceivedRemoteAudio(duration: 12, speakerID: UserID("teammate"))
+
+        XCTAssertEqual(model.replayAvailableDurationLabel, "0:12")
+        XCTAssertTrue(model.canPlayReplay)
+
+        model.selectRoom(ConversationID("conversation-2"))
+
+        XCTAssertEqual(model.replayAvailableDurationLabel, "0:00")
+        XCTAssertFalse(model.canPlayReplay)
+
+        model.simulateReceivedRemoteAudio(duration: 8, speakerID: UserID("teammate"))
+        model.applicationWillTerminate()
+
+        XCTAssertEqual(model.replayAvailableDurationLabel, "0:00")
+        XCTAssertFalse(model.canPlayReplay)
+
+        model.simulateReceivedRemoteAudio(duration: 8, speakerID: UserID("teammate"))
+        model.signOut()
+
+        XCTAssertEqual(model.replayAvailableDurationLabel, "0:00")
+        XCTAssertFalse(model.canPlayReplay)
+    }
+
+    func testReplayPlaybackDoesNotChangeFloorOrPublishingState() async {
+        let model = AppShellModel(apiService: FakeAppShellAPIService())
+        model.signInEmail = "alice@example.com"
+        await model.signIn()
+        model.simulateReceivedRemoteAudio(duration: 12, speakerID: UserID("teammate"))
+
+        model.playRecentReplay()
+
+        XCTAssertEqual(model.menuBarStatus, .listening)
+        XCTAssertFalse(model.isReplayPublishingMicrophone)
+        XCTAssertFalse(model.isReplayRequestingFloor)
+    }
+
+    func testAudioDeviceSelectionsAndMicTestStateAreExposedToSettings() {
+        let settingsStore = InMemorySettingsStore()
+        let model = AppShellModel(
+            apiService: FakeAppShellAPIService(),
+            settingsStore: settingsStore,
+            audioDeviceProvider: FixedAudioDeviceProvider(
+                inputDevices: [
+                    AudioDevice(id: "input-built-in", name: "Built-in Microphone", isSystemDefault: true),
+                    AudioDevice(id: "input-usb", name: "USB Microphone", isSystemDefault: false)
+                ],
+                outputDevices: [
+                    AudioDevice(id: "output-system", name: "System Output", isSystemDefault: true),
+                    AudioDevice(id: "output-headphones", name: "Headphones", isSystemDefault: false)
+                ]
+            )
+        )
+
+        model.selectInputDevice(id: "input-usb")
+        model.selectOutputDevice(id: "output-headphones")
+        model.startMicTest()
+        model.simulateMicInput(samples: [0, 0.6])
+
+        XCTAssertEqual(model.availableInputDevices.map(\.id), ["input-built-in", "input-usb"])
+        XCTAssertEqual(model.availableOutputDevices.map(\.id), ["output-system", "output-headphones"])
+        XCTAssertEqual(model.selectedInputDeviceID, "input-usb")
+        XCTAssertEqual(model.selectedOutputDeviceID, "output-headphones")
+        XCTAssertEqual(model.inputLevel, 0.6, accuracy: 0.001)
+        XCTAssertFalse(model.micTestPublishesAudio)
+        XCTAssertEqual(settingsStore.savedPreferences?.selectedInputDeviceID, "input-usb")
+    }
+
     func testFailedConversationLoadClearsStoredSessionToken() async throws {
         let tokenStore = InMemorySessionTokenStore()
         let model = AppShellModel(
@@ -175,6 +251,75 @@ private struct FailingConversationAPIService: AppShellAPIService {
 
     func conversations(sessionToken: String) async throws -> ConversationsResponse {
         throw URLError(.cannotConnectToHost)
+    }
+}
+
+private struct TwoRoomAppShellAPIService: AppShellAPIService {
+    func requestMagicLink(email: String) async throws -> MagicLinkResponse {
+        MagicLinkResponse(token: "magic-token")
+    }
+
+    func createSession(token: String, deviceName: String) async throws -> SessionResponse {
+        SessionResponse(
+            sessionToken: "session-token",
+            user: TokiUserSummary(id: UserID("user-1"), email: "alice@example.com", displayName: "Alice"),
+            teamMemberships: [],
+            device: TokiDeviceSummary(id: DeviceID("device-1"), name: "Alice Mac")
+        )
+    }
+
+    func conversations(sessionToken: String) async throws -> ConversationsResponse {
+        ConversationsResponse(conversations: [
+            ConversationSummary(
+                id: ConversationID("conversation-1"),
+                type: .group,
+                displayName: "Design",
+                members: [
+                    ConversationMemberSummary(
+                        user: TokiUserSummary(id: UserID("user-1"), email: "alice@example.com", displayName: "Alice"),
+                        role: "member"
+                    )
+                ],
+                lastPresence: ConversationPresenceSummary(onlineUserIDs: [UserID("user-1")], activeSpeakerID: nil)
+            ),
+            ConversationSummary(
+                id: ConversationID("conversation-2"),
+                type: .group,
+                displayName: "Ops",
+                members: [
+                    ConversationMemberSummary(
+                        user: TokiUserSummary(id: UserID("user-1"), email: "alice@example.com", displayName: "Alice"),
+                        role: "member"
+                    )
+                ],
+                lastPresence: ConversationPresenceSummary(onlineUserIDs: [UserID("user-1")], activeSpeakerID: nil)
+            )
+        ])
+    }
+}
+
+private struct FixedAudioDeviceProvider: AudioDeviceProviding {
+    let inputDevices: [AudioDevice]
+    let outputDevices: [AudioDevice]
+
+    func availableInputDevices() -> [AudioDevice] {
+        inputDevices
+    }
+
+    func availableOutputDevices() -> [AudioDevice] {
+        outputDevices
+    }
+}
+
+private final class InMemorySettingsStore: SettingsStoring, @unchecked Sendable {
+    private(set) var savedPreferences: DevicePreferences?
+
+    func load() -> DevicePreferences? {
+        savedPreferences
+    }
+
+    func save(_ preferences: DevicePreferences) {
+        savedPreferences = preferences
     }
 }
 

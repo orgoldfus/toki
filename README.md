@@ -14,6 +14,7 @@ The media policy is strict peer-to-peer for the MVP. The backend may coordinate 
 - Realtime: authenticated `/v1/realtime` WebSocket for active-room presence, WebRTC signaling metadata, and one-speaker floor control.
 - PTT floor control: backend grants one ephemeral floor token per conversation, denies concurrent speakers, and clears held floors on release, disconnect, timeout, or backend restart.
 - Strict P2P media foundation: authenticated STUN-only ICE config, client-side TURN/relay rejection, and a protocol-backed peer connection manager for active-room mesh setup.
+- Local audio controls: dynamic microphone/output device selection, mic test/input level state, active-speaker output level state, and local-only replay state capped at 2 minutes.
 
 ## Product Constraints
 
@@ -22,6 +23,7 @@ The media policy is strict peer-to-peer for the MVP. The backend may coordinate 
 - Hold-to-talk only.
 - One speaker at a time.
 - Groups are designed around up to 10 participants.
+- Replay is local-only, memory-only, scoped to the active room, and capped at the last 2 minutes of received audio.
 - Session tokens must not be stored in `UserDefaults` or logs.
 - Backend persistence is metadata-only. Do not add raw audio storage, TURN, SFU, MCU, or server-routed media for the MVP.
 
@@ -132,10 +134,24 @@ Still intentionally pending until the native WebRTC dependency is selected and w
 - Real native WebRTC peer connection creation.
 - Microphone track attachment from the floor-controlled PTT flow.
 - Remote audio playback through selected output devices.
+- Feeding real received WebRTC audio callbacks into the local replay buffer.
 - Manual two-client LAN and restrictive-network media tests.
+
+## Local Replay And Audio Devices
+
+Implemented in the current client foundation:
+
+- `AudioDeviceManager` enumerates microphone inputs and output devices, persists selected device IDs, and falls back to system defaults with a non-blocking warning when a selected device disappears.
+- `MicrophoneTestController` exposes local input level for mic test and speaking-state UI without enabling microphone publishing.
+- `LocalReplayBuffer` keeps a process-local 120-second buffer of received active-room audio segments only.
+- Replay clears on active room switch, sign-out, and app termination.
+- `ReplayPlayer` plays recent local segments without requesting the floor or publishing microphone audio.
+- The app shell and settings UI expose device selection, mic test level, active output level, and replay duration/play controls.
+
+The replay buffer is not persisted to disk, `UserDefaults`, backend APIs, logs, crash reports, analytics, or diagnostics. See [`docs/engineering/local-replay-and-audio-devices.md`](docs/engineering/local-replay-and-audio-devices.md) for the implementation contract.
 
 ## Verification Notes
 
 The backend realtime channel intentionally avoids audio paths. Re-check this before merging any future WebRTC, replay, diagnostics, or observability changes.
 
-CI runs the full Swift package tests and Go backend tests on pull requests. The current automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, token-aware PTT floor state, realtime floor request/release encoding, backend floor grant/deny/release/disconnect/timeout behavior, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.
+CI runs the full Swift package tests and Go backend tests on pull requests. The current automated coverage includes strict ICE validation, authenticated ICE config fetching, peer mesh lifecycle/signaling behavior, token-aware PTT floor state, realtime floor request/release encoding, local replay capacity/clearing/privacy behavior, audio device selection/fallback behavior, mic-test level behavior, app-shell replay controls, backend floor grant/deny/release/disconnect/timeout behavior, and the backend ICE config endpoint. Local Go verification requires Go 1.22 or newer to be installed.

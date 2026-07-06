@@ -29,19 +29,25 @@
 
 ## Implementation Steps
 
-- [ ] Add device enumeration for available microphone inputs and output devices.
-- [ ] Persist selected device IDs in local settings.
-- [ ] If a selected device disappears, fall back to system default and show a non-blocking warning.
-- [ ] Add microphone test mode that captures local mic level without sending audio to peers.
-- [ ] Add input level meter that works during mic test and while speaking.
-- [ ] Add output level indicator for the active remote speaker.
-- [ ] Create `LocalReplayBuffer` with fixed 2-minute capacity and no disk persistence.
-- [ ] Append received active-room audio segments to the replay buffer.
-- [ ] Do not append local microphone audio before it returns as a received remote stream.
-- [ ] Clear the replay buffer on active room switch.
-- [ ] Clear the replay buffer on sign-out and app termination.
-- [ ] Add replay UI showing available recent audio duration and a play button.
-- [ ] During replay playback, do not transmit and do not change floor state.
+- [x] Add device enumeration for available microphone inputs and output devices.
+- [x] Persist selected device IDs in local settings.
+- [x] If a selected device disappears, fall back to system default and show a non-blocking warning.
+- [x] Add microphone test mode that captures local mic level without sending audio to peers.
+- [x] Add input level meter that works during mic test and while speaking.
+- [x] Add output level indicator for the active remote speaker.
+- [x] Create `LocalReplayBuffer` with fixed 2-minute capacity and no disk persistence.
+- [x] Append received active-room audio segments to the replay buffer.
+- [x] Do not append local microphone audio before it returns as a received remote stream.
+- [x] Clear the replay buffer on active room switch.
+- [x] Clear the replay buffer on sign-out and app termination.
+- [x] Add replay UI showing available recent audio duration and a play button.
+- [x] During replay playback, do not transmit and do not change floor state.
+
+## Completion Notes
+
+- Implemented as Swift client/core seams in `AudioDeviceManager`, `MicrophoneTestController`, `LocalReplayBuffer`, `ReplayPlayer`, and `AppSessionState`.
+- The native WebRTC dependency is still pending, so real received-audio callbacks should feed `AppSessionState.appendReceivedAudio(_:conversationID:)` when the media layer lands.
+- CI already runs `swift build` and `swift test`, which cover the new Swift unit and app-shell tests.
 
 ## Interfaces
 

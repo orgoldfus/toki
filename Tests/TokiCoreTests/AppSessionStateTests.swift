@@ -13,6 +13,62 @@ final class AppSessionStateTests: XCTestCase {
         XCTAssertEqual(session.activity, .listening)
     }
 
+    func testReplayBuffersOnlyReceivedAudioForActiveRoomAndClearsOnRoomSwitch() {
+        let session = AppSessionState.mockSignedIn()
+        session.selectConversation(id: ConversationID("design"))
+
+        session.appendReceivedAudio(
+            LocalAudioSegment(
+                speakerID: UserID("teammate"),
+                receivedAt: Date(timeIntervalSince1970: 0),
+                duration: 10,
+                encodedAudio: Data(repeating: 1, count: 10)
+            ),
+            conversationID: ConversationID("design")
+        )
+        session.appendLocalMicrophoneAudioForReplay(duration: 10)
+
+        XCTAssertEqual(session.replayAvailableDuration, 10, accuracy: 0.001)
+
+        session.selectConversation(id: ConversationID("ops"))
+
+        XCTAssertEqual(session.replayAvailableDuration, 0, accuracy: 0.001)
+        XCTAssertEqual(session.lastReplayClearReason, .roomSwitch)
+    }
+
+    func testReplayClearsOnSignOutAndQuit() {
+        let session = AppSessionState.mockSignedIn()
+        session.selectConversation(id: ConversationID("design"))
+        session.appendReceivedAudio(
+            LocalAudioSegment(
+                speakerID: UserID("teammate"),
+                receivedAt: Date(timeIntervalSince1970: 0),
+                duration: 10,
+                encodedAudio: Data(repeating: 1, count: 10)
+            ),
+            conversationID: ConversationID("design")
+        )
+
+        session.signOut()
+
+        XCTAssertEqual(session.auth, .signedOut)
+        XCTAssertEqual(session.replayAvailableDuration, 0, accuracy: 0.001)
+        XCTAssertEqual(session.lastReplayClearReason, .signOut)
+
+        session.appendReceivedAudio(
+            LocalAudioSegment(
+                speakerID: UserID("teammate"),
+                receivedAt: Date(timeIntervalSince1970: 20),
+                duration: 10,
+                encodedAudio: Data(repeating: 1, count: 10)
+            ),
+            conversationID: ConversationID("design")
+        )
+        session.clearReplayForAppTermination()
+
+        XCTAssertEqual(session.lastReplayClearReason, .appTermination)
+    }
+
     func testSessionExposesAuthPermissionsAndDevicePreferences() {
         let preferences = DevicePreferences(
             selectedInputDeviceID: "input-built-in",
