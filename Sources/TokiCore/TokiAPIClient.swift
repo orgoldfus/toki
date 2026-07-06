@@ -160,6 +160,17 @@ public final class TokiAPIClient: @unchecked Sendable {
         try await send(path: "/v1/conversations", method: "GET", body: EmptyRequest?.none, sessionToken: sessionToken)
     }
 
+    public func iceConfig(sessionToken: String) async throws -> ICEConfigResponse {
+        let response: ICEConfigResponse = try await send(
+            path: "/v1/ice-config",
+            method: "GET",
+            body: EmptyRequest?.none,
+            sessionToken: sessionToken
+        )
+        try StrictP2PICEPolicy.validate(response)
+        return response
+    }
+
     public func createConversation(
         type: ConversationKind,
         memberIDs: [UserID],

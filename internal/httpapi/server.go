@@ -48,6 +48,15 @@ type presenceResponse struct {
 	ActiveSpeakerID *string  `json:"activeSpeakerId"`
 }
 
+type iceConfigResponse struct {
+	ICEServers  []iceConfigServerResponse `json:"iceServers"`
+	RelayPolicy string                    `json:"relayPolicy"`
+}
+
+type iceConfigServerResponse struct {
+	URLs []string `json:"urls"`
+}
+
 type conversationResponse struct {
 	ID           string                       `json:"id"`
 	Type         string                       `json:"type"`
@@ -70,6 +79,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/auth/magic-link", s.handleMagicLink)
 	s.mux.HandleFunc("POST /v1/auth/session", s.handleSession)
 	s.mux.HandleFunc("GET /v1/me", s.handleMe)
+	s.mux.HandleFunc("GET /v1/ice-config", s.handleIceConfig)
 	s.mux.HandleFunc("GET /v1/realtime", s.realtime.ServeHTTP)
 	s.mux.HandleFunc("GET /v1/conversations", s.handleListConversations)
 	s.mux.HandleFunc("POST /v1/conversations", s.handleCreateConversation)
@@ -121,6 +131,18 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"user":            apiUser(bundle.User),
 		"teamMemberships": apiMemberships(bundle),
 		"devices":         apiDevices(bundle.Devices),
+	})
+}
+
+func (s *Server) handleIceConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSession(w, r); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, iceConfigResponse{
+		ICEServers: []iceConfigServerResponse{
+			{URLs: []string{"stun:stun.l.google.com:19302"}},
+		},
+		RelayPolicy: "disabled",
 	})
 }
 
